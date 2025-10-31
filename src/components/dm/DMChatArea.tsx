@@ -24,9 +24,9 @@ interface DMChatAreaProps {
 }
 
 const MessageBubble = memo(({
-  message, 
-  isFromCurrentUser 
-}: { 
+  message,
+  isFromCurrentUser
+}: {
   message: {
     id: string;
     pubkey: string;
@@ -61,8 +61,8 @@ const MessageBubble = memo(({
     <div className={cn("flex mb-4", isFromCurrentUser ? "justify-end" : "justify-start")}>
       <div className={cn(
         "max-w-[70%] rounded-lg px-4 py-2",
-        isFromCurrentUser 
-          ? "bg-primary text-primary-foreground" 
+        isFromCurrentUser
+          ? "bg-primary text-primary-foreground"
           : "bg-muted"
       )}>
         {message.error ? (
@@ -101,7 +101,7 @@ const MessageBubble = memo(({
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
-          
+
           <TooltipProvider>
             <Tooltip delayDuration={200}>
               <TooltipTrigger asChild>
@@ -151,13 +151,76 @@ const MessageBubble = memo(({
 
 MessageBubble.displayName = 'MessageBubble';
 
-const ChatHeader = ({ pubkey, onBack }: { pubkey: string; onBack?: () => void }) => {
-  const author = useAuthor(pubkey);
-  const metadata = author.data?.metadata;
+const GroupAvatar = ({ pubkeys }: { pubkeys: string[] }) => {
+  // Show up to 4 avatars in a grid
+  const displayPubkeys = pubkeys.slice(0, 4);
+  const author0 = useAuthor(displayPubkeys[0]);
+  const author1 = useAuthor(displayPubkeys[1] || '');
+  const author2 = useAuthor(displayPubkeys[2] || '');
+  const author3 = useAuthor(displayPubkeys[3] || '');
 
-  const displayName = metadata?.name || genUserName(pubkey);
-  const avatarUrl = metadata?.picture;
-  const initials = displayName.slice(0, 2).toUpperCase();
+  const authors = [author0, author1, author2, author3];
+
+  if (displayPubkeys.length === 1) {
+    const metadata = author0.data?.metadata;
+    const displayName = metadata?.name || genUserName(displayPubkeys[0]);
+    const avatarUrl = metadata?.picture;
+    const initials = displayName.slice(0, 2).toUpperCase();
+
+    return (
+      <Avatar className="h-10 w-10">
+        <AvatarImage src={avatarUrl} alt={displayName} />
+        <AvatarFallback>{initials}</AvatarFallback>
+      </Avatar>
+    );
+  }
+
+  return (
+    <div className="h-10 w-10 grid grid-cols-2 gap-0.5 flex-shrink-0">
+      {displayPubkeys.map((pubkey, index) => {
+        const author = authors[index];
+        const metadata = author?.data?.metadata;
+        const displayName = metadata?.name || genUserName(pubkey);
+        const avatarUrl = metadata?.picture;
+        const initials = displayName.slice(0, 1).toUpperCase();
+
+        return (
+          <Avatar key={pubkey} className="h-[18px] w-[18px]">
+            <AvatarImage src={avatarUrl} alt={displayName} />
+            <AvatarFallback className="text-[8px]">{initials}</AvatarFallback>
+          </Avatar>
+        );
+      })}
+    </div>
+  );
+};
+
+const ParticipantNames = ({ pubkeys }: { pubkeys: string[] }) => {
+  // Fetch author data for first 2 participants
+  const author1 = useAuthor(pubkeys[0]);
+  const author2 = useAuthor(pubkeys[1]);
+
+  const name1 = author1.data?.metadata?.name || genUserName(pubkeys[0]);
+  const name2 = author2.data?.metadata?.name || genUserName(pubkeys[1]);
+
+  if (pubkeys.length === 1) {
+    return <span>{name1}</span>;
+  } else if (pubkeys.length === 2) {
+    return <span>{name1} and {name2}</span>;
+  } else {
+    const remaining = pubkeys.length - 2;
+    return <span>{name1}, {name2}, and {remaining} other{remaining > 1 ? 's' : ''}</span>;
+  }
+};
+
+const ChatHeader = ({ pubkey, onBack }: { pubkey: string; onBack?: () => void }) => {
+  // Check if this is a group chat
+  const isGroup = pubkey.startsWith('group:');
+  const pubkeys = isGroup ? pubkey.substring(6).split(',') : [pubkey];
+
+  // For individual chats
+  const author = useAuthor(pubkeys[0]);
+  const metadata = author.data?.metadata;
 
   return (
     <div className="p-4 border-b flex items-center gap-3">
@@ -171,16 +234,18 @@ const ChatHeader = ({ pubkey, onBack }: { pubkey: string; onBack?: () => void })
           <ArrowLeft className="h-5 w-5" />
         </Button>
       )}
-      
-      <Avatar className="h-10 w-10">
-        <AvatarImage src={avatarUrl} alt={displayName} />
-        <AvatarFallback>{initials}</AvatarFallback>
-      </Avatar>
-      
+
+      <GroupAvatar pubkeys={pubkeys} />
+
       <div className="flex-1 min-w-0">
-        <h2 className="font-semibold truncate">{displayName}</h2>
-        {metadata?.nip05 && (
+        <h2 className="font-semibold truncate">
+          {isGroup ? <ParticipantNames pubkeys={pubkeys} /> : (metadata?.name || genUserName(pubkeys[0]))}
+        </h2>
+        {!isGroup && metadata?.nip05 && (
           <p className="text-xs text-muted-foreground truncate">{metadata.nip05}</p>
+        )}
+        {isGroup && (
+          <p className="text-xs text-muted-foreground">{pubkeys.length} participants</p>
         )}
       </div>
     </div>
@@ -216,11 +281,11 @@ export const DMChatArea = ({ pubkey, onBack, className }: DMChatAreaProps) => {
   const { user } = useCurrentUser();
   const { sendMessage, protocolMode, isLoading } = useDMContext();
   const { messages, hasMoreMessages, loadEarlierMessages } = useConversationMessages(pubkey || '');
-  
+
   const [messageText, setMessageText] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
-  
+
   // Determine default protocol based on mode
   const getDefaultProtocol = () => {
     if (protocolMode === PROTOCOL_MODE.NIP04_ONLY) return MESSAGE_PROTOCOL.NIP04;
@@ -229,10 +294,10 @@ export const DMChatArea = ({ pubkey, onBack, className }: DMChatAreaProps) => {
     // Fallback to NIP-17 for any unexpected mode
     return MESSAGE_PROTOCOL.NIP17;
   };
-  
+
   const [selectedProtocol, setSelectedProtocol] = useState<MessageProtocol>(getDefaultProtocol());
   const scrollAreaRef = useRef<HTMLDivElement>(null);
-  
+
   // Determine if selection is allowed
   const allowSelection = protocolMode === PROTOCOL_MODE.NIP04_OR_NIP17;
 
@@ -273,19 +338,19 @@ export const DMChatArea = ({ pubkey, onBack, className }: DMChatAreaProps) => {
 
   const handleLoadMore = useCallback(async () => {
     if (!scrollAreaRef.current || isLoadingMore) return;
-    
+
     const scrollContainer = scrollAreaRef.current.querySelector('[data-radix-scroll-area-viewport]');
     if (!scrollContainer) return;
-    
+
     // Store current scroll position and height
     const previousScrollHeight = scrollContainer.scrollHeight;
     const previousScrollTop = scrollContainer.scrollTop;
-    
+
     setIsLoadingMore(true);
-    
+
     // Load more messages
     loadEarlierMessages();
-    
+
     // Wait for DOM to update, then restore relative scroll position
     setTimeout(() => {
       if (scrollContainer) {
@@ -318,7 +383,7 @@ export const DMChatArea = ({ pubkey, onBack, className }: DMChatAreaProps) => {
   return (
     <Card className={cn("h-full flex flex-col", className)}>
       <ChatHeader pubkey={pubkey} onBack={onBack} />
-      
+
       <ScrollArea ref={scrollAreaRef} className="flex-1 p-4">
         {messages.length === 0 ? (
           <div className="h-full flex items-center justify-center">
@@ -359,7 +424,7 @@ export const DMChatArea = ({ pubkey, onBack, className }: DMChatAreaProps) => {
           </div>
         )}
       </ScrollArea>
-      
+
       <div className="p-4 border-t">
         <div className="flex gap-2">
           <Textarea

@@ -1071,24 +1071,38 @@ export function DMProvider({ children, config }: DMProviderProps) {
         };
       }
 
+      // Determine conversation ID based on participants
+      // For NIP-17, the conversation is defined by the set of pubkeys in p tags
       let conversationPartner: string;
-      if (sealEvent.pubkey === user.pubkey) {
-        const recipient = messageEvent.tags.find(([name]) => name === 'p')?.[1];
-        if (!recipient || recipient === user.pubkey) {
-          return {
-            processedMessage: {
-              ...event,
-              content: '',
-              decryptedContent: '',
-              error: 'Invalid recipient - malformed p tag',
-            },
-            conversationPartner: event.pubkey,
-            sealEvent, // Return the seal
-          };
-        } else {
-          conversationPartner = recipient;
-        }
+
+      // Get all p tags (recipients)
+      const allRecipients = messageEvent.tags
+        .filter(([name]) => name === 'p')
+        .map(([, pubkey]) => pubkey);
+
+      if (allRecipients.length === 0) {
+        return {
+          processedMessage: {
+            ...event,
+            content: '',
+            decryptedContent: '',
+            error: 'Invalid message - no recipients',
+          },
+          conversationPartner: event.pubkey,
+          sealEvent,
+        };
+      }
+
+      // For group chats (multiple p tags), create a group ID
+      if (allRecipients.length > 1) {
+        // Create sorted group ID for consistent identification
+        const sortedRecipients = [...allRecipients].sort();
+        conversationPartner = `group:${sortedRecipients.join(',')}`;
+      } else if (sealEvent.pubkey === user.pubkey) {
+        // Message sent by me - conversation partner is the recipient
+        conversationPartner = allRecipients[0];
       } else {
+        // Message sent to me - conversation partner is the sender
         conversationPartner = sealEvent.pubkey;
       }
 
