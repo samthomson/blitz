@@ -10,21 +10,30 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Badge } from '@/components/ui/badge';
-import { MessageSquarePlus, X } from 'lucide-react';
+import { MessageSquarePlus, X, Check } from 'lucide-react';
 import { useToast } from '@/hooks/useToast';
 import { useDMContext } from '@/contexts/DMContext';
 import { useAuthor } from '@/hooks/useAuthor';
 import { genUserName } from '@/lib/genUserName';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { cn } from '@/lib/utils';
 
 interface NewConversationDialogProps {
   onStartConversation: (pubkey: string) => void;
 }
 
-function ContactItem({ pubkey, onClick, searchTerm }: { pubkey: string; onClick: () => void; searchTerm?: string }) {
+function ContactRow({ 
+  pubkey, 
+  isSelected, 
+  onToggle,
+  searchTerm 
+}: { 
+  pubkey: string; 
+  isSelected: boolean;
+  onToggle: () => void;
+  searchTerm?: string;
+}) {
   const author = useAuthor(pubkey);
   const metadata = author.data?.metadata;
   const displayName = metadata?.name || genUserName(pubkey);
@@ -38,8 +47,14 @@ function ContactItem({ pubkey, onClick, searchTerm }: { pubkey: string; onClick:
 
   return (
     <button
-      onClick={onClick}
-      className="w-full flex items-center gap-3 p-3 hover:bg-accent rounded-lg transition-colors text-left"
+      type="button"
+      onClick={onToggle}
+      className={cn(
+        "w-full flex items-center gap-3 p-3 rounded-lg transition-all text-left",
+        isSelected 
+          ? "bg-primary/10 border-2 border-primary" 
+          : "hover:bg-accent border-2 border-transparent"
+      )}
     >
       <Avatar className="h-10 w-10 flex-shrink-0">
         <AvatarImage src={avatarUrl} />
@@ -47,36 +62,25 @@ function ContactItem({ pubkey, onClick, searchTerm }: { pubkey: string; onClick:
       </Avatar>
       <div className="flex-1 min-w-0">
         <div className="font-medium truncate">{displayName}</div>
-        <div className="text-xs text-muted-foreground truncate font-mono">
-          {pubkey.slice(0, 8)}...{pubkey.slice(-8)}
+        <div className="text-xs text-muted-foreground truncate">
+          @{displayName.toLowerCase().replace(/\s+/g, '')}
         </div>
       </div>
+      {isSelected && (
+        <div className="flex-shrink-0 w-6 h-6 rounded-full bg-primary flex items-center justify-center">
+          <Check className="w-4 h-4 text-primary-foreground" />
+        </div>
+      )}
     </button>
-  );
-}
-
-function SelectedContact({ pubkey, onRemove }: { pubkey: string; onRemove: () => void }) {
-  const author = useAuthor(pubkey);
-  const metadata = author.data?.metadata;
-  const displayName = metadata?.name || genUserName(pubkey);
-
-  return (
-    <Badge variant="secondary" className="pl-3 pr-2 py-1.5 gap-2">
-      <span className="truncate max-w-[150px]">{displayName}</span>
-      <button
-        onClick={onRemove}
-        className="hover:bg-muted rounded-full p-0.5 transition-colors"
-      >
-        <X className="h-3 w-3" />
-      </button>
-    </Badge>
   );
 }
 
 export function NewConversationDialog({ onStartConversation }: NewConversationDialogProps) {
   const [open, setOpen] = useState(false);
-  const [input, setInput] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+  const [manualInput, setManualInput] = useState('');
   const [selectedPubkeys, setSelectedPubkeys] = useState<string[]>([]);
+  const [showManualEntry, setShowManualEntry] = useState(false);
   const { toast } = useToast();
   const { conversations } = useDMContext();
 
@@ -85,63 +89,36 @@ export function NewConversationDialog({ onStartConversation }: NewConversationDi
     return conversations.map(c => c.pubkey);
   }, [conversations]);
 
-  // Filter contacts based on input - search by display name
+  // Filter contacts based on search
   const filteredContacts = useMemo(() => {
-    if (!input.trim()) return existingContacts;
+    return existingContacts;
+  }, [existingContacts]);
 
-    return existingContacts.filter(pubkey => {
-      // Don't show already selected contacts
-      if (selectedPubkeys.includes(pubkey)) return false;
-
-      return true; // Will be filtered by display name in ContactItem component
-    });
-  }, [input, existingContacts, selectedPubkeys]);
-
-  const handleAddPubkey = (pubkey: string) => {
-    if (!selectedPubkeys.includes(pubkey)) {
-      setSelectedPubkeys([...selectedPubkeys, pubkey]);
-      setInput('');
-    }
+  const handleToggleContact = (pubkey: string) => {
+    setSelectedPubkeys(prev => 
+      prev.includes(pubkey) 
+        ? prev.filter(p => p !== pubkey)
+        : [...prev, pubkey]
+    );
   };
 
-  const handleRemovePubkey = (pubkey: string) => {
-    setSelectedPubkeys(selectedPubkeys.filter(p => p !== pubkey));
-  };
-
-  const handleInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    // If user presses Enter and there's a filtered contact, add the first one
-    if (e.key === 'Enter' && filteredContacts.length > 0 && input.trim()) {
-      e.preventDefault();
-      handleAddPubkey(filteredContacts[0]);
-      return;
-    }
-
-    // If user presses Backspace on empty input, remove last selected contact
-    if (e.key === 'Backspace' && !input && selectedPubkeys.length > 0) {
-      e.preventDefault();
-      setSelectedPubkeys(selectedPubkeys.slice(0, -1));
-    }
-  };
-
-  const handleManualAdd = () => {
-    if (!input.trim()) return;
+  const handleAddManual = () => {
+    if (!manualInput.trim()) return;
 
     try {
       let pubkey: string;
 
       // Check if input is already a hex pubkey (64 characters)
-      if (/^[0-9a-f]{64}$/i.test(input)) {
-        pubkey = input.toLowerCase();
-      } else if (input.startsWith('npub1')) {
-        // Decode npub
-        const decoded = nip19.decode(input);
+      if (/^[0-9a-f]{64}$/i.test(manualInput)) {
+        pubkey = manualInput.toLowerCase();
+      } else if (manualInput.startsWith('npub1')) {
+        const decoded = nip19.decode(manualInput);
         if (decoded.type !== 'npub') {
           throw new Error('Invalid npub format');
         }
         pubkey = decoded.data;
-      } else if (input.startsWith('nprofile1')) {
-        // Decode nprofile
-        const decoded = nip19.decode(input);
+      } else if (manualInput.startsWith('nprofile1')) {
+        const decoded = nip19.decode(manualInput);
         if (decoded.type !== 'nprofile') {
           throw new Error('Invalid nprofile format');
         }
@@ -150,7 +127,11 @@ export function NewConversationDialog({ onStartConversation }: NewConversationDi
         throw new Error('Please enter a valid npub, nprofile, or hex pubkey');
       }
 
-      handleAddPubkey(pubkey);
+      if (!selectedPubkeys.includes(pubkey)) {
+        setSelectedPubkeys([...selectedPubkeys, pubkey]);
+        setManualInput('');
+        setShowManualEntry(false);
+      }
     } catch (error) {
       toast({
         title: 'Invalid input',
@@ -172,38 +153,52 @@ export function NewConversationDialog({ onStartConversation }: NewConversationDi
       return;
     }
 
-    // For group chats with multiple recipients, create a group identifier
-    // NIP-17 defines a chat room as the set of pubkey + p tags
-    // We create a stable identifier by sorting the pubkeys
+    // For group chats with multiple recipients
     if (selectedPubkeys.length > 1) {
-      // Create sorted group ID for consistent identification
       const groupId = `group:${[...selectedPubkeys].sort().join(',')}`;
       onStartConversation(groupId);
-
+      
       toast({
         title: 'Group chat started',
         description: `Starting conversation with ${selectedPubkeys.length} people`,
       });
     } else {
-      // Single recipient - standard 1-on-1 chat
+      // Single recipient
       onStartConversation(selectedPubkeys[0]);
     }
 
     setOpen(false);
     setSelectedPubkeys([]);
-    setInput('');
+    setSearchInput('');
+    setManualInput('');
+    setShowManualEntry(false);
   };
 
   const handleOpenChange = (newOpen: boolean) => {
     setOpen(newOpen);
     if (!newOpen) {
-      // Reset state when closing
       setSelectedPubkeys([]);
-      setInput('');
+      setSearchInput('');
+      setManualInput('');
+      setShowManualEntry(false);
     }
   };
 
-  const showSuggestions = input.trim().length > 0 || filteredContacts.length > 0;
+  const visibleContacts = useMemo(() => {
+    const items = filteredContacts
+      .map(pubkey => (
+        <ContactRow
+          key={pubkey}
+          pubkey={pubkey}
+          isSelected={selectedPubkeys.includes(pubkey)}
+          onToggle={() => handleToggleContact(pubkey)}
+          searchTerm={searchInput.trim()}
+        />
+      ))
+      .filter(item => item !== null);
+    
+    return items;
+  }, [filteredContacts, selectedPubkeys, searchInput]);
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -212,99 +207,129 @@ export function NewConversationDialog({ onStartConversation }: NewConversationDi
           <MessageSquarePlus className="h-4 w-4" />
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
+      <DialogContent className="sm:max-w-lg max-h-[85vh] flex flex-col p-0">
+        <DialogHeader className="px-6 pt-6 pb-4">
           <DialogTitle>New Conversation</DialogTitle>
           <DialogDescription>
-            Select contacts or enter a Nostr public key
+            Select one or more contacts to start messaging
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Selected Contacts */}
-          {selectedPubkeys.length > 0 && (
-            <div className="flex flex-wrap gap-2">
-              {selectedPubkeys.map(pubkey => (
-                <SelectedContact
-                  key={pubkey}
-                  pubkey={pubkey}
-                  onRemove={() => handleRemovePubkey(pubkey)}
-                />
-              ))}
-            </div>
-          )}
 
-          {/* Input Field */}
-          <div className="space-y-2">
-            <Label htmlFor="pubkey">Add Contact</Label>
-            <div className="flex gap-2">
-              <Input
-                id="pubkey"
-                placeholder="Search or enter npub1..."
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={handleInputKeyDown}
-                className="font-mono text-sm"
-              />
-              {input.trim() && (
-                <Button type="button" onClick={handleManualAdd} variant="outline">
-                  Add
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
+          {/* Search Input */}
+          <div className="px-6 pb-4">
+            <Input
+              placeholder="Search by name..."
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              className="w-full"
+            />
+          </div>
+
+          {/* Contact List */}
+          <ScrollArea className="flex-1 px-6">
+            <div className="space-y-2 pb-4">
+              {visibleContacts.length > 0 ? (
+                visibleContacts
+              ) : (
+                <div className="py-12 text-center">
+                  <p className="text-sm text-muted-foreground mb-4">
+                    {searchInput ? 'No contacts found' : 'No recent contacts'}
+                  </p>
+                  {!showManualEntry && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowManualEntry(true)}
+                    >
+                      Enter pubkey manually
+                    </Button>
+                  )}
+                </div>
+              )}
+
+              {/* Manual Entry Section */}
+              {showManualEntry && (
+                <div className="mt-4 p-4 border rounded-lg bg-muted/50">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-sm font-medium">Enter Public Key</p>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setShowManualEntry(false);
+                        setManualInput('');
+                      }}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="npub1... or hex"
+                      value={manualInput}
+                      onChange={(e) => setManualInput(e.target.value)}
+                      className="font-mono text-xs"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleAddManual();
+                        }
+                      }}
+                    />
+                    <Button
+                      type="button"
+                      onClick={handleAddManual}
+                      size="sm"
+                    >
+                      Add
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {/* Show manual entry button at bottom if we have contacts */}
+              {visibleContacts.length > 0 && !showManualEntry && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowManualEntry(true)}
+                  className="w-full mt-2"
+                >
+                  Enter pubkey manually
                 </Button>
               )}
             </div>
-            <p className="text-xs text-muted-foreground">
-              {existingContacts.length > 0
-                ? 'Select from your contacts or enter a new npub/hex pubkey'
-                : 'Enter npub, nprofile, or hex format'
-              }
-            </p>
-          </div>
+          </ScrollArea>
 
-          {/* Contact Suggestions */}
-          {showSuggestions && (
-            <div className="space-y-2">
-              <Label className="text-xs text-muted-foreground">
-                {input.trim() ? 'Matching Contacts' : 'Recent Contacts'}
-              </Label>
-              <ScrollArea className="h-[200px] rounded-lg border">
-                <div className="p-2">
-                  {filteredContacts.length > 0 ? (
-                    (() => {
-                      const items = filteredContacts
-                        .slice(0, 20)
-                        .map(pubkey => (
-                          <ContactItem
-                            key={pubkey}
-                            pubkey={pubkey}
-                            searchTerm={input.trim()}
-                            onClick={() => handleAddPubkey(pubkey)}
-                          />
-                        ))
-                        .filter(item => item !== null);
-
-                      return items.length > 0 ? items : (
-                        <div className="p-4 text-center text-sm text-muted-foreground">
-                          No matching contacts found
-                        </div>
-                      );
-                    })()
-                  ) : (
-                    <div className="p-4 text-center text-sm text-muted-foreground">
-                      No matching contacts found
-                    </div>
-                  )}
-                </div>
-              </ScrollArea>
+          {/* Footer with selected count and action buttons */}
+          <div className="border-t px-6 py-4 bg-muted/30">
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-muted-foreground">
+                {selectedPubkeys.length === 0 
+                  ? 'No contacts selected' 
+                  : `${selectedPubkeys.length} ${selectedPubkeys.length === 1 ? 'contact' : 'contacts'} selected`
+                }
+              </p>
+              <div className="flex gap-2">
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  onClick={() => handleOpenChange(false)}
+                >
+                  Cancel
+                </Button>
+                <Button 
+                  type="submit" 
+                  disabled={selectedPubkeys.length === 0}
+                >
+                  Start Chat
+                </Button>
+              </div>
             </div>
-          )}
-
-          {/* Action Buttons */}
-          <div className="flex justify-end gap-2">
-            <Button type="button" variant="outline" onClick={() => handleOpenChange(false)}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={selectedPubkeys.length === 0}>
-              Start Chat {selectedPubkeys.length > 0 && `(${selectedPubkeys.length})`}
-            </Button>
           </div>
         </form>
       </DialogContent>
