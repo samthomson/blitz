@@ -16,7 +16,6 @@ import { useDMContext } from '@/contexts/DMContext';
 import { useAuthor } from '@/hooks/useAuthor';
 import { genUserName } from '@/lib/genUserName';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 
 interface NewConversationDialogProps {
@@ -84,7 +83,7 @@ export function NewConversationDialog({ onStartConversation }: NewConversationDi
   const { toast } = useToast();
   const { conversations } = useDMContext();
 
-  // Get all existing conversation pubkeys for autocomplete
+  // Get all existing conversation pubkeys (people you've messaged before)
   const existingContacts = useMemo(() => {
     return conversations.map(c => c.pubkey);
   }, [conversations]);
@@ -207,17 +206,17 @@ export function NewConversationDialog({ onStartConversation }: NewConversationDi
           <MessageSquarePlus className="h-4 w-4" />
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-lg max-h-[85vh] flex flex-col p-0">
-        <DialogHeader className="px-6 pt-6 pb-4">
+      <DialogContent className="sm:max-w-lg max-h-[85vh] flex flex-col p-0 overflow-hidden">
+        <DialogHeader className="px-6 pt-6 pb-4 flex-shrink-0">
           <DialogTitle>New Conversation</DialogTitle>
           <DialogDescription>
-            Select one or more contacts to start messaging
+            Select one or more contacts to start messaging. Showing people you've messaged before.
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 overflow-hidden">
           {/* Search Input */}
-          <div className="px-6 pb-4">
+          <div className="px-6 pb-4 flex-shrink-0">
             <Input
               placeholder="Search by name..."
               value={searchInput}
@@ -227,14 +226,14 @@ export function NewConversationDialog({ onStartConversation }: NewConversationDi
           </div>
 
           {/* Contact List */}
-          <ScrollArea className="flex-1 px-6">
+          <div className="flex-1 min-h-0 overflow-y-auto px-6">
             <div className="space-y-2 pb-4">
               {visibleContacts.length > 0 ? (
                 visibleContacts
               ) : (
                 <div className="py-12 text-center">
                   <p className="text-sm text-muted-foreground mb-4">
-                    {searchInput ? 'No contacts found' : 'No recent contacts'}
+                    {searchInput ? 'No contacts found' : 'No previous conversations'}
                   </p>
                   {!showManualEntry && (
                     <Button
@@ -303,10 +302,10 @@ export function NewConversationDialog({ onStartConversation }: NewConversationDi
                 </Button>
               )}
             </div>
-          </ScrollArea>
+          </div>
 
           {/* Footer with selected count and action buttons */}
-          <div className="border-t px-6 py-4 bg-muted/30">
+          <div className="border-t px-6 py-4 bg-muted/30 flex-shrink-0">
             <div className="flex items-center justify-between">
               <p className="text-sm text-muted-foreground">
                 {selectedPubkeys.length === 0 
