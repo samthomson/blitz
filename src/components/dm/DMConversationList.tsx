@@ -1,5 +1,5 @@
 import { useMemo, useState, memo } from 'react';
-import { AlertTriangle, Info, Loader2 } from 'lucide-react';
+import { Info, Loader2 } from 'lucide-react';
 import { useDMContext } from '@/contexts/DMContext';
 import { useAuthor } from '@/hooks/useAuthor';
 import { genUserName } from '@/lib/genUserName';
@@ -118,7 +118,6 @@ const ConversationItemComponent = ({
   onClick,
   lastMessage,
   lastActivity,
-  hasNIP4Messages
 }: ConversationItemProps) => {
   // Check if this is a group
   const isGroup = pubkey.startsWith('group:');
@@ -178,20 +177,6 @@ const ConversationItemComponent = ({
                 <Skeleton className="h-[1.25rem] w-24" />
               ) : (
                 <span className="font-medium text-sm truncate">{displayName}</span>
-              )}
-              {hasNIP4Messages && (
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <div className="flex-shrink-0">
-                        <AlertTriangle className="h-3.5 w-3.5 text-yellow-600 dark:text-yellow-500" />
-                      </div>
-                    </TooltipTrigger>
-                    <TooltipContent side="left">
-                      <p className="text-xs max-w-[200px]">Some messages use outdated NIP-04 encryption</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
               )}
             </div>
             <TooltipProvider>
