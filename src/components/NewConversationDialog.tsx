@@ -1,4 +1,4 @@
-import { useState, useMemo, memo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { nip19 } from 'nostr-tools';
 import {
   Dialog,
@@ -9,7 +9,6 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { MessageSquarePlus, X, Check } from 'lucide-react';
 import { useToast } from '@/hooks/useToast';
 import { useDMContext } from '@/contexts/DMContext';
@@ -17,68 +16,29 @@ import { useFollows } from '@/hooks/useFollows';
 import { useAuthorsBatch } from '@/hooks/useAuthorsBatch';
 import { genUserName } from '@/lib/genUserName';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Badge } from '@/components/ui/badge';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command';
 import { cn } from '@/lib/utils';
 
 interface NewConversationDialogProps {
   onStartConversation: (pubkey: string) => void;
 }
 
-interface ContactRowProps {
-  pubkey: string;
-  isSelected: boolean;
-  onToggle: () => void;
-  metadata?: { name?: string; picture?: string };
-}
-
-function ContactRowComponent({ 
-  pubkey, 
-  isSelected, 
-  onToggle,
-  metadata
-}: ContactRowProps) {
-  const displayName = metadata?.name || genUserName(pubkey);
-  const avatarUrl = metadata?.picture;
-  const initials = displayName.slice(0, 2).toUpperCase();
-
-  return (
-    <button
-      type="button"
-      onClick={onToggle}
-      className={cn(
-        "w-full flex items-center gap-3 p-3 rounded-lg transition-all text-left",
-        isSelected 
-          ? "bg-primary/10 border-2 border-primary" 
-          : "hover:bg-accent border-2 border-transparent"
-      )}
-    >
-      <Avatar className="h-10 w-10 flex-shrink-0">
-        <AvatarImage src={avatarUrl} />
-        <AvatarFallback>{initials}</AvatarFallback>
-      </Avatar>
-      <div className="flex-1 min-w-0">
-        <div className="font-medium truncate">{displayName}</div>
-        <div className="text-xs text-muted-foreground truncate">
-          @{displayName.toLowerCase().replace(/\s+/g, '')}
-        </div>
-      </div>
-      {isSelected && (
-        <div className="flex-shrink-0 w-6 h-6 rounded-full bg-primary flex items-center justify-center">
-          <Check className="w-4 h-4 text-primary-foreground" />
-        </div>
-      )}
-    </button>
-  );
-}
-
-const ContactRow = memo(ContactRowComponent);
-ContactRow.displayName = 'ContactRow';
 
 export function NewConversationDialog({ onStartConversation }: NewConversationDialogProps) {
-  const [open, setOpen] = useState(false);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [popoverOpen, setPopoverOpen] = useState(false);
   const [searchInput, setSearchInput] = useState('');
-  const [manualInput, setManualInput] = useState('');
   const [selectedPubkeys, setSelectedPubkeys] = useState<string[]>([]);
-  const [showManualEntry, setShowManualEntry] = useState(false);
+  const [highlightedIndex, setHighlightedIndex] = useState(-1);
+  const inputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const { conversations } = useDMContext();
   const { data: follows = [], isLoading: isLoadingFollows } = useFollows();
@@ -129,35 +89,35 @@ export function NewConversationDialog({ onStartConversation }: NewConversationDi
     );
   };
 
-  const handleAddManual = () => {
-    if (!manualInput.trim()) return;
+  const handleAddManual = (input: string) => {
+    if (!input.trim()) return;
 
     try {
       let pubkey: string;
 
       // Check if input is already a hex pubkey (64 characters)
-      if (/^[0-9a-f]{64}$/i.test(manualInput)) {
-        pubkey = manualInput.toLowerCase();
-      } else if (manualInput.startsWith('npub1')) {
-        const decoded = nip19.decode(manualInput);
+      if (/^[0-9a-f]{64}$/i.test(input)) {
+        pubkey = input.toLowerCase();
+      } else if (input.startsWith('npub1')) {
+        const decoded = nip19.decode(input);
         if (decoded.type !== 'npub') {
           throw new Error('Invalid npub format');
         }
         pubkey = decoded.data;
-      } else if (manualInput.startsWith('nprofile1')) {
-        const decoded = nip19.decode(manualInput);
+      } else if (input.startsWith('nprofile1')) {
+        const decoded = nip19.decode(input);
         if (decoded.type !== 'nprofile') {
           throw new Error('Invalid nprofile format');
         }
         pubkey = decoded.data.pubkey;
       } else {
-        throw new Error('Please enter a valid npub, nprofile, or hex pubkey');
+        return; // Not a pubkey, just return (will show in search)
       }
 
       if (!selectedPubkeys.includes(pubkey)) {
         setSelectedPubkeys([...selectedPubkeys, pubkey]);
-        setManualInput('');
-        setShowManualEntry(false);
+        setSearchInput('');
+        setPopoverOpen(false);
       }
     } catch (error) {
       toast({
@@ -170,6 +130,11 @@ export function NewConversationDialog({ onStartConversation }: NewConversationDi
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Try to add manual input if it looks like a pubkey
+    if (searchInput.trim()) {
+      handleAddManual(searchInput.trim());
+    }
 
     if (selectedPubkeys.length === 0) {
       toast({
@@ -194,48 +159,90 @@ export function NewConversationDialog({ onStartConversation }: NewConversationDi
       onStartConversation(selectedPubkeys[0]);
     }
 
-    setOpen(false);
+    setDialogOpen(false);
     setSelectedPubkeys([]);
     setSearchInput('');
-    setManualInput('');
-    setShowManualEntry(false);
+    setPopoverOpen(false);
   };
 
-  const handleOpenChange = (newOpen: boolean) => {
-    setOpen(newOpen);
+  const handleDialogOpenChange = (newOpen: boolean) => {
+    setDialogOpen(newOpen);
     if (!newOpen) {
       setSelectedPubkeys([]);
       setSearchInput('');
-      setManualInput('');
-      setShowManualEntry(false);
+      setPopoverOpen(false);
     }
   };
 
-  const visibleContacts = useMemo(() => {
-    return filteredContacts.map(pubkey => {
+  const selectedContacts = useMemo(() => {
+    return selectedPubkeys.map(pubkey => {
       const author = authorsMap.get(pubkey);
       const metadata = author?.metadata;
-      
-      return (
-        <ContactRow
-          key={pubkey}
-          pubkey={pubkey}
-          isSelected={selectedPubkeys.includes(pubkey)}
-          onToggle={() => handleToggleContact(pubkey)}
-          metadata={metadata}
-        />
-      );
+      return { pubkey, metadata };
     });
-  }, [filteredContacts, selectedPubkeys, authorsMap]);
+  }, [selectedPubkeys, authorsMap]);
+
+  const handleRemoveSelected = (pubkey: string) => {
+    setSelectedPubkeys(prev => prev.filter(p => p !== pubkey));
+    inputRef.current?.focus();
+  };
+
+  const handleInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    const currentFiltered = filteredContacts;
+    
+    if (e.key === 'Backspace' && searchInput === '' && selectedPubkeys.length > 0) {
+      e.preventDefault();
+      setSelectedPubkeys(prev => prev.slice(0, -1));
+      setHighlightedIndex(-1);
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      e.stopPropagation();
+      setPopoverOpen(true);
+      setHighlightedIndex(prev => {
+        if (currentFiltered.length === 0) return -1;
+        return prev < currentFiltered.length - 1 ? prev + 1 : 0;
+      });
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      e.stopPropagation();
+      setPopoverOpen(true);
+      setHighlightedIndex(prev => {
+        if (currentFiltered.length === 0) return -1;
+        return prev > 0 ? prev - 1 : currentFiltered.length - 1;
+      });
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      e.stopPropagation();
+      if (highlightedIndex >= 0 && highlightedIndex < currentFiltered.length) {
+        // Select highlighted contact
+        const pubkey = currentFiltered[highlightedIndex];
+        handleToggleContact(pubkey);
+        setSearchInput('');
+        setHighlightedIndex(-1);
+      } else if (searchInput.trim()) {
+        // Try to add as pubkey
+        const trimmed = searchInput.trim();
+        if (/^[0-9a-f]{64}$/i.test(trimmed) || trimmed.startsWith('npub1') || trimmed.startsWith('nprofile1')) {
+          handleAddManual(trimmed);
+        }
+      }
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      setPopoverOpen(false);
+      setHighlightedIndex(-1);
+    }
+  };
+
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
+    <Dialog open={dialogOpen} onOpenChange={handleDialogOpenChange}>
       <DialogTrigger asChild>
         <Button size="icon" variant="ghost" className="h-8 w-8">
           <MessageSquarePlus className="h-4 w-4" />
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-lg max-h-[85vh] flex flex-col p-0 overflow-hidden">
+      <DialogContent className="sm:max-w-lg max-h-[85vh] flex flex-col p-0 overflow-hidden top-[25%] translate-y-[-25%]">
         <DialogHeader className="px-6 pt-6 pb-4 flex-shrink-0">
           <DialogTitle>New Conversation</DialogTitle>
           <DialogDescription>
@@ -243,107 +250,198 @@ export function NewConversationDialog({ onStartConversation }: NewConversationDi
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 overflow-hidden">
-          {/* Search Input */}
+        <form 
+          onSubmit={(e) => {
+            e.preventDefault();
+            handleSubmit(e);
+          }} 
+          className="flex flex-col flex-1 min-h-0 overflow-hidden"
+        >
+          {/* Autocomplete Dropdown */}
           <div className="px-6 pb-4 flex-shrink-0">
-            <Input
-              placeholder="Search by name..."
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-              className="w-full"
-            />
-          </div>
-
-          {/* Contact List */}
-          <div className="flex-1 min-h-0 overflow-y-auto px-6">
-            <div className="space-y-2 pb-4">
-              {isLoading ? (
-                <div className="py-12 text-center">
-                  <p className="text-sm text-muted-foreground">Loading contacts...</p>
-                </div>
-              ) : visibleContacts.length > 0 ? (
-                <>
-                  {visibleContacts}
-                  {isFetchingMetadata && (
-                    <div className="py-2 text-center">
-                      <p className="text-xs text-muted-foreground">
-                        Loading profile information...
-                      </p>
-                    </div>
-                  )}
-                </>
-              ) : (
-                <div className="py-12 text-center">
-                  <p className="text-sm text-muted-foreground mb-4">
-                    {searchInput ? 'No contacts found' : 'No contacts available'}
-                  </p>
-                  {!showManualEntry && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setShowManualEntry(true)}
-                    >
-                      Enter pubkey manually
-                    </Button>
-                  )}
-                </div>
-              )}
-
-              {/* Manual Entry Section */}
-              {showManualEntry && (
-                <div className="mt-4 p-4 border rounded-lg bg-muted/50">
-                  <div className="flex items-center justify-between mb-2">
-                    <p className="text-sm font-medium">Enter Public Key</p>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => {
-                        setShowManualEntry(false);
-                        setManualInput('');
-                      }}
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
-                  </div>
-                  <div className="flex gap-2">
-                    <Input
-                      placeholder="npub1... or hex"
-                      value={manualInput}
-                      onChange={(e) => setManualInput(e.target.value)}
-                      className="font-mono text-xs"
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault();
-                          handleAddManual();
-                        }
-                      }}
-                    />
-                    <Button
-                      type="button"
-                      onClick={handleAddManual}
-                      size="sm"
-                    >
-                      Add
-                    </Button>
-                  </div>
-                </div>
-              )}
-
-              {/* Show manual entry button at bottom if we have contacts */}
-              {visibleContacts.length > 0 && !showManualEntry && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowManualEntry(true)}
-                  className="w-full mt-2"
+            <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
+              <PopoverTrigger asChild>
+                <div
+                  role="combobox"
+                  aria-expanded={popoverOpen}
+                  className="w-full min-h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-within:outline-none focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 flex items-center gap-2 flex-wrap cursor-text"
+                  onClick={() => {
+                    setPopoverOpen(true);
+                    // Don't force focus - let it happen naturally
+                  }}
                 >
-                  Enter pubkey manually
-                </Button>
-              )}
-            </div>
+                  {selectedContacts.map(({ pubkey, metadata }) => {
+                    const displayName = metadata?.name || genUserName(pubkey);
+                    const avatarUrl = metadata?.picture;
+                    return (
+                      <Badge
+                        key={pubkey}
+                        variant="secondary"
+                        className="flex items-center gap-1.5 pr-1 h-6 shrink-0"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleRemoveSelected(pubkey);
+                        }}
+                      >
+                        <Avatar className="h-4 w-4">
+                          <AvatarImage src={avatarUrl} />
+                          <AvatarFallback className="text-[10px]">
+                            {displayName.slice(0, 2).toUpperCase()}
+                          </AvatarFallback>
+                        </Avatar>
+                        <span className="text-xs">{displayName}</span>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleRemoveSelected(pubkey);
+                          }}
+                          className="ml-1 rounded-full hover:bg-muted p-0.5"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </Badge>
+                    );
+                  })}
+                  <input
+                    ref={inputRef}
+                    type="text"
+                    value={searchInput}
+                    onChange={(e) => {
+                      const newValue = e.target.value;
+                      setSearchInput(newValue);
+                      if (!popoverOpen) {
+                        setPopoverOpen(true);
+                      }
+                      setHighlightedIndex(-1);
+                    }}
+                    onKeyDown={handleInputKeyDown}
+                    onFocus={() => {
+                      setPopoverOpen(true);
+                    }}
+                    placeholder={selectedContacts.length === 0 
+                      ? 'Search contacts or paste pubkey...'
+                      : selectedContacts.length === 1
+                      ? 'Search for more...'
+                      : 'Search for more or paste pubkey...'}
+                    className="flex-1 min-w-[120px] bg-transparent outline-none text-sm placeholder:text-muted-foreground"
+                    autoComplete="off"
+                  />
+                </div>
+              </PopoverTrigger>
+              <PopoverContent 
+                className="w-[--radix-popover-trigger-width] p-0" 
+                align="start" 
+                side="bottom" 
+                sideOffset={4}
+                onOpenAutoFocus={(e) => {
+                  e.preventDefault();
+                  // Keep focus on input, not popover
+                }}
+                onInteractOutside={(e) => {
+                  // Don't close if clicking on the input
+                  if (inputRef.current?.contains(e.target as Node)) {
+                    e.preventDefault();
+                  }
+                }}
+                onEscapeKeyDown={(e) => {
+                  // Prevent closing on escape when input has focus
+                  if (document.activeElement === inputRef.current) {
+                    e.preventDefault();
+                  }
+                }}
+              >
+                <Command 
+                  shouldFilter={false}
+                  loop={false}
+                >
+                  <CommandList
+                    style={{ pointerEvents: 'auto' }}
+                  >
+                    {isLoading ? (
+                      <div className="py-6 text-center text-sm text-muted-foreground">
+                        Loading contacts...
+                      </div>
+                    ) : (
+                      <>
+                        <CommandEmpty>
+                          {searchInput ? (
+                            <div className="py-6 text-center">
+                              <p className="text-sm text-muted-foreground mb-2">
+                                No contacts found
+                              </p>
+                              {(/^[0-9a-f]{64}$/i.test(searchInput.trim()) || 
+                                searchInput.trim().startsWith('npub1') || 
+                                searchInput.trim().startsWith('nprofile1')) && (
+                                <p className="text-xs text-muted-foreground">
+                                  Press Enter to add this pubkey
+                                </p>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="py-6 text-center text-sm text-muted-foreground">
+                              Start typing to search or paste a pubkey
+                            </div>
+                          )}
+                        </CommandEmpty>
+                        {filteredContacts.length > 0 && (
+                          <CommandGroup>
+                            {filteredContacts.map((pubkey, index) => {
+                              const author = authorsMap.get(pubkey);
+                              const metadata = author?.metadata;
+                              const displayName = metadata?.name || genUserName(pubkey);
+                              const avatarUrl = metadata?.picture;
+                              const initials = displayName.slice(0, 2).toUpperCase();
+                              const isSelected = selectedPubkeys.includes(pubkey);
+                              const isHighlighted = highlightedIndex === index;
+
+                              return (
+                                <CommandItem
+                                  key={pubkey}
+                                  value={pubkey}
+                                  onSelect={() => {
+                                    handleToggleContact(pubkey);
+                                    setSearchInput('');
+                                    setHighlightedIndex(-1);
+                                  }}
+                                  className={cn(
+                                    "flex items-center gap-3",
+                                    isHighlighted ? "bg-accent" : "[&[data-selected='true']]:!bg-transparent"
+                                  )}
+                                  onMouseEnter={() => setHighlightedIndex(index)}
+                                  data-selected={isHighlighted}
+                                >
+                                  <Avatar className="h-8 w-8 flex-shrink-0">
+                                    <AvatarImage src={avatarUrl} />
+                                    <AvatarFallback>{initials}</AvatarFallback>
+                                  </Avatar>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="font-medium truncate">{displayName}</div>
+                                    <div className="text-xs text-muted-foreground truncate">
+                                      @{displayName.toLowerCase().replace(/\s+/g, '')}
+                                    </div>
+                                  </div>
+                                  {isSelected && (
+                                    <Check className="h-4 w-4 text-primary flex-shrink-0" />
+                                  )}
+                                </CommandItem>
+                              );
+                            })}
+                          </CommandGroup>
+                        )}
+                        {isFetchingMetadata && (
+                          <div className="py-2 text-center">
+                            <p className="text-xs text-muted-foreground">
+                              Loading profile information...
+                            </p>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
           </div>
 
           {/* Footer with selected count and action buttons */}
@@ -359,7 +457,7 @@ export function NewConversationDialog({ onStartConversation }: NewConversationDi
                 <Button 
                   type="button" 
                   variant="outline" 
-                  onClick={() => handleOpenChange(false)}
+                  onClick={() => handleDialogOpenChange(false)}
                 >
                   Cancel
                 </Button>
