@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, memo } from 'react';
 import { nip19 } from 'nostr-tools';
 import {
   Dialog,
@@ -23,17 +23,19 @@ interface NewConversationDialogProps {
   onStartConversation: (pubkey: string) => void;
 }
 
-function ContactRow({ 
+interface ContactRowProps {
+  pubkey: string;
+  isSelected: boolean;
+  onToggle: () => void;
+  metadata?: { name?: string; picture?: string };
+}
+
+function ContactRowComponent({ 
   pubkey, 
   isSelected, 
   onToggle,
   metadata
-}: { 
-  pubkey: string; 
-  isSelected: boolean;
-  onToggle: () => void;
-  metadata?: { name?: string; picture?: string };
-}) {
+}: ContactRowProps) {
   const displayName = metadata?.name || genUserName(pubkey);
   const avatarUrl = metadata?.picture;
   const initials = displayName.slice(0, 2).toUpperCase();
@@ -68,6 +70,9 @@ function ContactRow({
   );
 }
 
+const ContactRow = memo(ContactRowComponent);
+ContactRow.displayName = 'ContactRow';
+
 export function NewConversationDialog({ onStartConversation }: NewConversationDialogProps) {
   const [open, setOpen] = useState(false);
   const [searchInput, setSearchInput] = useState('');
@@ -93,11 +98,12 @@ export function NewConversationDialog({ onStartConversation }: NewConversationDi
     return Array.from(uniquePubkeys);
   }, [follows, conversations]);
 
-  // Batch-fetch metadata for all contacts in one query (much more efficient!)
-  const { data: authorsMap = new Map(), isLoading: isLoadingMetadata } = useAuthorsBatch(allContacts);
+  // Batch-fetch metadata in chunks (works efficiently for any list size)
+  // Returns immediately so UI can render, metadata fills in progressively
+  const { data: authorsMap = new Map(), isFetching: isFetchingMetadata } = useAuthorsBatch(allContacts);
   
-  // Combined loading state
-  const isLoading = isLoadingFollows || isLoadingMetadata;
+  // Show loading only for initial follows fetch, not metadata (UI renders immediately)
+  const isLoading = isLoadingFollows;
 
   // Filter contacts based on search (now we can filter properly since we have metadata)
   const filteredContacts = useMemo(() => {
@@ -256,7 +262,16 @@ export function NewConversationDialog({ onStartConversation }: NewConversationDi
                   <p className="text-sm text-muted-foreground">Loading contacts...</p>
                 </div>
               ) : visibleContacts.length > 0 ? (
-                visibleContacts
+                <>
+                  {visibleContacts}
+                  {isFetchingMetadata && (
+                    <div className="py-2 text-center">
+                      <p className="text-xs text-muted-foreground">
+                        Loading profile information...
+                      </p>
+                    </div>
+                  )}
+                </>
               ) : (
                 <div className="py-12 text-center">
                   <p className="text-sm text-muted-foreground mb-4">

@@ -1,40 +1,48 @@
 import { type NostrEvent, type NostrMetadata, NSchema as n } from '@nostrify/nostrify';
 import { useNostr } from '@nostrify/react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
+import { useState, useEffect, useRef, useCallback } from 'react';
+
+const CHUNK_SIZE = 100; // Fetch metadata for 100 authors at a time
 
 /**
- * Hook to batch-fetch metadata for multiple authors at once.
+ * Hook to batch-fetch metadata for multiple authors.
  * 
- * More efficient than calling useAuthor individually for each pubkey.
- * Queries all Kind 0 (metadata) events in a single request.
+ * Optimized for both small and large lists. It:
+ * 1. Returns immediately with an empty Map so UI can render with fallback names
+ * 2. Fetches metadata in chunks (100 at a time) in the background
+ * 3. Updates the returned Map incrementally as chunks arrive
+ * 4. Populates individual `useAuthor` caches so they can reuse data
+ * 
+ * Works efficiently for any list size - small lists (< 100) complete quickly,
+ * large lists (1000+) progressively fill in without blocking the UI.
  * 
  * **Cache Sharing**: This hook automatically populates the individual `useAuthor` cache
  * so that if you later call `useAuthor(pubkey)` for any of these pubkeys, it will use
- * the cached data instead of making another network request. This ensures efficient
- * cache reuse across the app.
+ * the cached data instead of making another network request.
  * 
  * @param pubkeys - Array of pubkeys to fetch metadata for
- * @returns Map of pubkey -> metadata/event, with loading state
+ * @returns Map that grows incrementally, plus loading/fetching states
  * 
  * @example
  * ```tsx
  * import { useAuthorsBatch } from '@/hooks/useAuthorsBatch';
  * 
  * function ContactList({ pubkeys }: { pubkeys: string[] }) {
- *   const { data: authorsMap, isLoading } = useAuthorsBatch(pubkeys);
+ *   const { data: authorsMap, isFetching } = useAuthorsBatch(pubkeys);
  *   
- *   if (isLoading) return <div>Loading...</div>;
- *   
+ *   // UI can render immediately with fallback names, metadata fills in as chunks arrive
  *   return (
  *     <div>
  *       {pubkeys.map(pubkey => {
  *         const author = authorsMap?.get(pubkey);
  *         return (
  *           <div key={pubkey}>
- *             {author?.metadata?.name || pubkey}
+ *             {author?.metadata?.name || genUserName(pubkey)}
  *           </div>
  *         );
  *       })}
+ *       {isFetching && <div>Loading metadata...</div>}
  *     </div>
  *   );
  * }
@@ -43,57 +51,156 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 export function useAuthorsBatch(pubkeys: string[]) {
   const { nostr } = useNostr();
   const queryClient = useQueryClient();
+  
+  // Accumulated results Map that grows as chunks arrive
+  const [authorsMap, setAuthorsMap] = useState<Map<string, { event?: NostrEvent; metadata?: NostrMetadata }>>(new Map());
+  const [isFetching, setIsFetching] = useState(false);
+  const [loadedCount, setLoadedCount] = useState(0);
+  
+  // Track which chunks we've already fetched to avoid duplicates
+  const fetchedChunks = useRef(new Set<string>());
+  const abortControllerRef = useRef<AbortController | null>(null);
 
-  return useQuery<Map<string, { event?: NostrEvent; metadata?: NostrMetadata }>>({
-    queryKey: ['authors-batch', pubkeys.sort().join(',')],
-    queryFn: async ({ signal }) => {
-      if (pubkeys.length === 0) {
-        return new Map();
+  // Process a chunk of events and update state
+  const processChunk = useCallback((events: NostrEvent[], chunkPubkeys: string[]) => {
+    const chunkMap = new Map<string, { event?: NostrEvent; metadata?: NostrMetadata }>();
+
+    // Process each event from this chunk
+    for (const event of events) {
+      let authorData: { event?: NostrEvent; metadata?: NostrMetadata };
+      
+      try {
+        const metadata = n.json().pipe(n.metadata()).parse(event.content);
+        authorData = { metadata, event };
+      } catch {
+        authorData = { event };
       }
+      
+      chunkMap.set(event.pubkey, authorData);
+    }
 
-      // Query all metadata events in one request
+    // Add entries for pubkeys in this chunk that don't have metadata
+    for (const pubkey of chunkPubkeys) {
+      if (!chunkMap.has(pubkey)) {
+        chunkMap.set(pubkey, {});
+      }
+    }
+
+    // Merge into accumulated map and populate individual author caches
+    setAuthorsMap(prev => {
+      const merged = new Map(prev);
+      chunkMap.forEach((authorData, pubkey) => {
+        merged.set(pubkey, authorData);
+        // Populate individual author cache (same pattern for all)
+        queryClient.setQueryData(['author', pubkey], authorData);
+      });
+      return merged;
+    });
+
+    setLoadedCount(prev => prev + chunkPubkeys.length);
+  }, [queryClient]);
+
+  // Fetch a single chunk
+  const fetchChunk = useCallback(async (chunkPubkeys: string[], chunkKey: string) => {
+    if (fetchedChunks.current.has(chunkKey)) {
+      return; // Already fetched this chunk
+    }
+    
+    fetchedChunks.current.add(chunkKey);
+    setIsFetching(true);
+
+    try {
+      const abortController = new AbortController();
+      abortControllerRef.current = abortController;
+
       const events = await nostr.query(
-        [{ kinds: [0], authors: pubkeys, limit: pubkeys.length }],
-        { signal: AbortSignal.any([signal, AbortSignal.timeout(5000)]) },
+        [{ kinds: [0], authors: chunkPubkeys, limit: chunkPubkeys.length }],
+        { signal: AbortSignal.any([abortController.signal, AbortSignal.timeout(5000)]) }
       );
 
-      // Build a map of pubkey -> metadata/event
-      const authorsMap = new Map<string, { event?: NostrEvent; metadata?: NostrMetadata }>();
+      // Only process if not aborted
+      if (!abortController.signal.aborted) {
+        processChunk(events, chunkPubkeys);
+      }
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        // Expected when component unmounts or pubkeys change
+        return;
+      }
+      console.error('[useAuthorsBatch] Error fetching chunk:', error);
+    } finally {
+      setIsFetching(false);
+    }
+  }, [nostr, processChunk]);
 
-      // Process each event and add to map
-      for (const event of events) {
-        try {
-          const metadata = n.json().pipe(n.metadata()).parse(event.content);
-          const authorData = { metadata, event };
-          authorsMap.set(event.pubkey, authorData);
-          
-          // Also populate individual author cache so useAuthor() can reuse this data
-          queryClient.setQueryData(['author', event.pubkey], authorData);
-        } catch {
-          const authorData = { event };
-          authorsMap.set(event.pubkey, authorData);
-          
-          // Also populate individual author cache
-          queryClient.setQueryData(['author', event.pubkey], authorData);
-        }
+  // Main effect: split pubkeys into chunks and fetch them
+  const pubkeysString = pubkeys.join(',');
+  useEffect(() => {
+    if (pubkeys.length === 0) {
+      setAuthorsMap(new Map());
+      setLoadedCount(0);
+      setIsFetching(false);
+      fetchedChunks.current.clear();
+      return;
+    }
+
+    // Reset state when pubkeys change
+    setAuthorsMap(new Map());
+    setLoadedCount(0);
+    setIsFetching(true);
+    fetchedChunks.current.clear();
+
+    // Cancel any in-flight requests
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+
+    // Split into chunks
+    const chunks: string[][] = [];
+    for (let i = 0; i < pubkeys.length; i += CHUNK_SIZE) {
+      chunks.push(pubkeys.slice(i, i + CHUNK_SIZE));
+    }
+
+    // Fetch chunks sequentially (to avoid overwhelming relay)
+    // We could do parallel but sequential is safer for large lists
+    let currentChunk = 0;
+    
+    const fetchNextChunk = async () => {
+      if (currentChunk >= chunks.length) {
+        setIsFetching(false);
+        return;
       }
 
-      // Add entries for pubkeys that don't have metadata (so consumers know they were queried)
-      for (const pubkey of pubkeys) {
-        if (!authorsMap.has(pubkey)) {
-          const authorData = {};
-          authorsMap.set(pubkey, authorData);
-          
-          // Also populate individual author cache (empty object means we queried but got no data)
-          queryClient.setQueryData(['author', pubkey], authorData);
-        }
+      const chunk = chunks[currentChunk];
+      const chunkKey = chunk.sort().join(',');
+      
+      await fetchChunk(chunk, chunkKey);
+      
+      currentChunk++;
+      
+      // Small delay between chunks to avoid rate limiting
+      if (currentChunk < chunks.length) {
+        setTimeout(fetchNextChunk, 100);
+      } else {
+        setIsFetching(false);
       }
+    };
 
-      return authorsMap;
-    },
-    enabled: pubkeys.length > 0,
-    staleTime: 4 * 60 * 60 * 1000, // Keep cached data fresh for 4 hours (profile metadata changes infrequently)
-    retry: 2,
-  });
+    fetchNextChunk();
+
+    // Cleanup: abort in-flight requests
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, [pubkeysString, pubkeys.length, fetchChunk]); // Re-run when pubkeys change
+
+  return {
+    data: authorsMap,
+    isFetching, // True while chunks are being fetched in the background
+    loadedCount, // Number of pubkeys we've loaded metadata for
+    totalCount: pubkeys.length,
+  };
 }
 
