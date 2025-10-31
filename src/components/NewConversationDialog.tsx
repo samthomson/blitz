@@ -24,12 +24,17 @@ interface NewConversationDialogProps {
   onStartConversation: (pubkey: string) => void;
 }
 
-function ContactItem({ pubkey, onClick }: { pubkey: string; onClick: () => void }) {
+function ContactItem({ pubkey, onClick, searchTerm }: { pubkey: string; onClick: () => void; searchTerm?: string }) {
   const author = useAuthor(pubkey);
   const metadata = author.data?.metadata;
   const displayName = metadata?.name || genUserName(pubkey);
   const avatarUrl = metadata?.picture;
   const initials = displayName.slice(0, 2).toUpperCase();
+
+  // Filter by display name if search term provided
+  if (searchTerm && !displayName.toLowerCase().includes(searchTerm.toLowerCase())) {
+    return null;
+  }
 
   return (
     <button
@@ -80,19 +85,15 @@ export function NewConversationDialog({ onStartConversation }: NewConversationDi
     return conversations.map(c => c.pubkey);
   }, [conversations]);
 
-  // Filter contacts based on input
+  // Filter contacts based on input - search by display name
   const filteredContacts = useMemo(() => {
     if (!input.trim()) return existingContacts;
 
-    const searchTerm = input.toLowerCase();
     return existingContacts.filter(pubkey => {
       // Don't show already selected contacts
       if (selectedPubkeys.includes(pubkey)) return false;
 
-      // Match against pubkey
-      if (pubkey.toLowerCase().includes(searchTerm)) return true;
-
-      return false;
+      return true; // Will be filtered by display name in ContactItem component
     });
   }, [input, existingContacts, selectedPubkeys]);
 
@@ -171,17 +172,23 @@ export function NewConversationDialog({ onStartConversation }: NewConversationDi
       return;
     }
 
+    // For group chats with multiple recipients, create a group identifier
+    // NIP-17 defines a chat room as the set of pubkey + p tags
+    // We create a stable identifier by sorting the pubkeys
     if (selectedPubkeys.length > 1) {
+      // Create sorted group ID for consistent identification
+      const groupId = `group:${[...selectedPubkeys].sort().join(',')}`;
+      onStartConversation(groupId);
+
       toast({
-        title: 'Group messaging not yet supported',
-        description: 'Please select only one contact. Group messaging will be added in a future update.',
-        variant: 'destructive',
+        title: 'Group chat started',
+        description: `Starting conversation with ${selectedPubkeys.length} people`,
       });
-      return;
+    } else {
+      // Single recipient - standard 1-on-1 chat
+      onStartConversation(selectedPubkeys[0]);
     }
 
-    // Start conversation with the selected contact
-    onStartConversation(selectedPubkeys[0]);
     setOpen(false);
     setSelectedPubkeys([]);
     setInput('');
@@ -261,13 +268,25 @@ export function NewConversationDialog({ onStartConversation }: NewConversationDi
               <ScrollArea className="h-[200px] rounded-lg border">
                 <div className="p-2">
                   {filteredContacts.length > 0 ? (
-                    filteredContacts.slice(0, 10).map(pubkey => (
-                      <ContactItem
-                        key={pubkey}
-                        pubkey={pubkey}
-                        onClick={() => handleAddPubkey(pubkey)}
-                      />
-                    ))
+                    (() => {
+                      const items = filteredContacts
+                        .slice(0, 20)
+                        .map(pubkey => (
+                          <ContactItem
+                            key={pubkey}
+                            pubkey={pubkey}
+                            searchTerm={input.trim()}
+                            onClick={() => handleAddPubkey(pubkey)}
+                          />
+                        ))
+                        .filter(item => item !== null);
+
+                      return items.length > 0 ? items : (
+                        <div className="p-4 text-center text-sm text-muted-foreground">
+                          No matching contacts found
+                        </div>
+                      );
+                    })()
                   ) : (
                     <div className="p-4 text-center text-sm text-muted-foreground">
                       No matching contacts found
