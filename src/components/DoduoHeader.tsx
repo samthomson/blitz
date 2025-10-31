@@ -2,6 +2,7 @@ import { MessageSquare, Moon, Sun, Settings, Info } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useTheme } from '@/hooks/useTheme';
 import { LoginArea } from '@/components/auth/LoginArea';
+import { HelpDialog } from '@/components/HelpDialog';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -36,7 +37,9 @@ export function DoduoHeader({ onStatusClick }: DoduoHeaderProps) {
         {/* Actions */}
         <div className="flex items-center gap-2">
           <LoginArea className="max-w-48" />
-          
+
+          <HelpDialog />
+
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon" className="rounded-full">
