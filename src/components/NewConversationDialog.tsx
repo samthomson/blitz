@@ -14,6 +14,7 @@ import { MessageSquarePlus, X, Check } from 'lucide-react';
 import { useToast } from '@/hooks/useToast';
 import { useDMContext } from '@/contexts/DMContext';
 import { useAuthor } from '@/hooks/useAuthor';
+import { useFollows } from '@/hooks/useFollows';
 import { genUserName } from '@/lib/genUserName';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
@@ -82,16 +83,33 @@ export function NewConversationDialog({ onStartConversation }: NewConversationDi
   const [showManualEntry, setShowManualEntry] = useState(false);
   const { toast } = useToast();
   const { conversations } = useDMContext();
+  const { data: follows = [], isLoading: isLoadingFollows } = useFollows();
 
-  // Get all existing conversation pubkeys (people you've messaged before)
-  const existingContacts = useMemo(() => {
-    return conversations.map(c => c.pubkey);
-  }, [conversations]);
+  // Combine follows with previous conversations for a comprehensive contact list
+  // Deduplicate by pubkey, prioritizing follows (first in array)
+  const allContacts = useMemo(() => {
+    const previousConversationPubkeys = conversations.map(c => c.pubkey);
+    const uniquePubkeys = new Set<string>();
+    
+    // Add follows first
+    follows.forEach(pubkey => uniquePubkeys.add(pubkey));
+    
+    // Then add previous conversations that aren't already in follows
+    previousConversationPubkeys.forEach(pubkey => uniquePubkeys.add(pubkey));
+    
+    return Array.from(uniquePubkeys);
+  }, [follows, conversations]);
 
   // Filter contacts based on search
   const filteredContacts = useMemo(() => {
-    return existingContacts;
-  }, [existingContacts]);
+    if (!searchInput.trim()) {
+      return allContacts;
+    }
+    
+    // If there's a search term, we'll filter in ContactRow component
+    // But we still need to return all contacts so ContactRow can filter
+    return allContacts;
+  }, [allContacts, searchInput]);
 
   const handleToggleContact = (pubkey: string) => {
     setSelectedPubkeys(prev => 
@@ -210,7 +228,7 @@ export function NewConversationDialog({ onStartConversation }: NewConversationDi
         <DialogHeader className="px-6 pt-6 pb-4 flex-shrink-0">
           <DialogTitle>New Conversation</DialogTitle>
           <DialogDescription>
-            Select one or more contacts to start messaging. Showing people you've messaged before.
+            Select one or more contacts to start messaging. Showing people you follow.
           </DialogDescription>
         </DialogHeader>
 
@@ -228,12 +246,16 @@ export function NewConversationDialog({ onStartConversation }: NewConversationDi
           {/* Contact List */}
           <div className="flex-1 min-h-0 overflow-y-auto px-6">
             <div className="space-y-2 pb-4">
-              {visibleContacts.length > 0 ? (
+              {isLoadingFollows ? (
+                <div className="py-12 text-center">
+                  <p className="text-sm text-muted-foreground">Loading contacts...</p>
+                </div>
+              ) : visibleContacts.length > 0 ? (
                 visibleContacts
               ) : (
                 <div className="py-12 text-center">
                   <p className="text-sm text-muted-foreground mb-4">
-                    {searchInput ? 'No contacts found' : 'No previous conversations'}
+                    {searchInput ? 'No contacts found' : 'No contacts available'}
                   </p>
                   {!showManualEntry && (
                     <Button
