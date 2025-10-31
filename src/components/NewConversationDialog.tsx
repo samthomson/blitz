@@ -246,7 +246,7 @@ export function NewConversationDialog({ onStartConversation }: NewConversationDi
         <DialogHeader className="px-6 pt-6 pb-4 flex-shrink-0">
           <DialogTitle>New Conversation</DialogTitle>
           <DialogDescription>
-            Select one or more contacts to start messaging. Showing people you follow.
+            Select one or more contacts to start messaging. <br/>Select from people you follow or have already messaged, or enter a pubkey.
           </DialogDescription>
         </DialogHeader>
 
