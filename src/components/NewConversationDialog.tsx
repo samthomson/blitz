@@ -263,7 +263,7 @@ export function NewConversationDialog({ onStartConversation }: NewConversationDi
           className="flex flex-col flex-1 min-h-0 overflow-hidden"
         >
           {/* Autocomplete Dropdown */}
-          <div className="px-6 pb-4 flex-shrink-0">
+          <div className="px-6 py-4 flex-shrink-0">
             <Popover open={popoverOpen} onOpenChange={setPopoverOpen} modal={false}>
               <PopoverTrigger asChild>
                 <div
