@@ -44,16 +44,21 @@ export function NewConversationDialog({ onStartConversation }: NewConversationDi
   const { data: follows = [], isLoading: isLoadingFollows } = useFollows();
 
   // Combine follows with previous conversations for a comprehensive contact list
+  // Only include conversations where user has actually sent messages (isKnown), not just requests
   // Deduplicate by pubkey, prioritizing follows (first in array)
   const allContacts = useMemo(() => {
-    const previousConversationPubkeys = conversations.map(c => c.pubkey);
+    // Filter to only known conversations (user has sent at least one message)
+    const knownConversationPubkeys = conversations
+      .filter(c => c.isKnown) // Only include conversations where user has sent messages
+      .map(c => c.pubkey);
+    
     const uniquePubkeys = new Set<string>();
     
     // Add follows first
     follows.forEach(pubkey => uniquePubkeys.add(pubkey));
     
-    // Then add previous conversations that aren't already in follows
-    previousConversationPubkeys.forEach(pubkey => uniquePubkeys.add(pubkey));
+    // Then add known conversations that aren't already in follows
+    knownConversationPubkeys.forEach(pubkey => uniquePubkeys.add(pubkey));
     
     return Array.from(uniquePubkeys);
   }, [follows, conversations]);
