@@ -3,7 +3,6 @@ import { nip19 } from 'nostr-tools';
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -248,12 +247,15 @@ export function NewConversationDialog({ onStartConversation }: NewConversationDi
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-lg max-h-[85vh] flex flex-col p-0 overflow-hidden top-[25%] translate-y-[-25%]">
-        <DialogHeader className="px-6 pt-6 pb-4 flex-shrink-0">
+        <DialogHeader className="px-6 pt-6 pb-2 flex-shrink-0">
           <DialogTitle>New Conversation</DialogTitle>
-          <DialogDescription>
-            Select one or more contacts to start messaging. <br/>Select from people you follow or have already messaged, or enter a pubkey.
-          </DialogDescription>
         </DialogHeader>
+
+        <div className="px-6">
+          <p className="text-sm text-muted-foreground">
+            Select one or more contacts to start messaging. Select from people you follow or have already messaged, or enter a pubkey.
+          </p>
+        </div>
 
         <form 
           onSubmit={(e) => {
@@ -263,7 +265,7 @@ export function NewConversationDialog({ onStartConversation }: NewConversationDi
           className="flex flex-col flex-1 min-h-0 overflow-hidden"
         >
           {/* Autocomplete Dropdown */}
-          <div className="px-6 py-4 flex-shrink-0">
+          <div className="px-6 pb-4 flex-shrink-0">
             <Popover open={popoverOpen} onOpenChange={setPopoverOpen} modal={false}>
               <PopoverTrigger asChild>
                 <div
