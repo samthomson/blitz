@@ -418,7 +418,7 @@ export function NewConversationDialog({ onStartConversation }: NewConversationDi
                             }}
                             onMouseEnter={() => setHighlightedIndex(index)}
                             className={cn(
-                              "flex items-center gap-3 px-3 py-2 cursor-pointer transition-colors",
+                              "flex items-start gap-3 px-3 py-2 cursor-pointer transition-colors",
                               isHighlighted ? "bg-accent" : "hover:bg-accent/50"
                             )}
                           >
