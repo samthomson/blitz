@@ -1,7 +1,7 @@
 import { type NostrEvent, type NostrMetadata, NSchema as n } from '@nostrify/nostrify';
 import { useNostr } from '@nostrify/react';
 import { useQueryClient } from '@tanstack/react-query';
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useAppContext } from '@/hooks/useAppContext';
 import { getMetadataRelays } from '@/lib/metadataRelays';
 
@@ -54,6 +54,12 @@ export function useAuthorsBatch(pubkeys: string[]) {
   const { nostr } = useNostr();
   const queryClient = useQueryClient();
   const { config } = useAppContext();
+  
+  // Memoize metadata relays to prevent recreating on every render
+  const metadataRelays = useMemo(
+    () => nostr.group(getMetadataRelays(config.relayUrl)),
+    [nostr, config.relayUrl]
+  );
   
   // Accumulated results Map that grows as chunks arrive
   const [authorsMap, setAuthorsMap] = useState<Map<string, { event?: NostrEvent; metadata?: NostrMetadata }>>(new Map());
@@ -116,8 +122,6 @@ export function useAuthorsBatch(pubkeys: string[]) {
       const abortController = new AbortController();
       abortControllerRef.current = abortController;
 
-      const metadataRelays = nostr.group(getMetadataRelays(config.relayUrl));
-
       const events = await metadataRelays.query(
         [{ kinds: [0], authors: chunkPubkeys, limit: chunkPubkeys.length }],
         { signal: AbortSignal.any([abortController.signal, AbortSignal.timeout(5000)]) }
@@ -136,7 +140,7 @@ export function useAuthorsBatch(pubkeys: string[]) {
     } finally {
       setIsFetching(false);
     }
-  }, [nostr, processChunk, config.relayUrl]);
+  }, [metadataRelays, processChunk]);
 
   // Main effect: split pubkeys into chunks and fetch them
   const pubkeysString = pubkeys.join(',');
