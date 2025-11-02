@@ -11,12 +11,14 @@ import { Button } from '@/components/ui/button';
 import { MessageSquarePlus, X, Check } from 'lucide-react';
 import { useToast } from '@/hooks/useToast';
 import { useDMContext } from '@/contexts/DMContext';
+import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useFollows } from '@/hooks/useFollows';
 import { useAuthorsBatch } from '@/hooks/useAuthorsBatch';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
+import { createConversationId } from '@/lib/dmUtils';
 
 interface NewConversationDialogProps {
   onStartConversation: (pubkey: string) => void;
@@ -33,6 +35,7 @@ export function NewConversationDialog({ onStartConversation }: NewConversationDi
   const listRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
   const { conversations } = useDMContext();
+  const { user } = useCurrentUser();
   const { data: follows = [], isLoading: isLoadingFollows } = useFollows();
 
   const allContacts = useMemo(() => {
@@ -191,18 +194,26 @@ export function NewConversationDialog({ onStartConversation }: NewConversationDi
       return;
     }
 
-    // For group chats with multiple recipients
+    if (!user?.pubkey) {
+      toast({
+        title: 'Not logged in',
+        description: 'You must be logged in to start a conversation',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    // Create conversation ID including current user + all selected recipients
+    // For 1-on-1: returns just the other person's pubkey
+    // For groups: returns "group:alice,bob,charlie" (sorted)
+    const conversationId = createConversationId([user.pubkey, ...selectedPubkeys]);
+    onStartConversation(conversationId);
+    
     if (selectedPubkeys.length > 1) {
-      const groupId = `group:${[...selectedPubkeys].sort().join(',')}`;
-      onStartConversation(groupId);
-      
       toast({
         title: 'Group chat started',
         description: `Starting conversation with ${selectedPubkeys.length} people`,
       });
-    } else {
-      // Single recipient
-      onStartConversation(selectedPubkeys[0]);
     }
 
     setDialogOpen(false);

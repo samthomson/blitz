@@ -3,7 +3,7 @@ import { Info, Loader2 } from 'lucide-react';
 import { useDMContext } from '@/contexts/DMContext';
 import { useAuthor } from '@/hooks/useAuthor';
 import { genUserName } from '@/lib/genUserName';
-import { formatConversationTime, formatFullDateTime } from '@/lib/dmUtils';
+import { formatConversationTime, formatFullDateTime, parseConversationId, isGroupConversation } from '@/lib/dmUtils';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -119,9 +119,9 @@ const ConversationItemComponent = ({
   lastMessage,
   lastActivity,
 }: ConversationItemProps) => {
-  // Check if this is a group
-  const isGroup = pubkey.startsWith('group:');
-  const pubkeys = isGroup ? pubkey.substring(6).split(',') : [pubkey];
+  // Check if this is a group and parse pubkeys
+  const isGroup = isGroupConversation(pubkey);
+  const pubkeys = parseConversationId(pubkey);
 
   // For individual chats
   const author = useAuthor(pubkeys[0]);

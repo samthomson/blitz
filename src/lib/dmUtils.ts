@@ -96,3 +96,44 @@ export function formatFullDateTime(timestamp: number): string {
     minute: '2-digit'
   });
 }
+
+/**
+ * Create a consistent conversation ID from a set of participants
+ * For 1-on-1: returns the single pubkey
+ * For groups: returns "group:pubkey1,pubkey2,pubkey3" (sorted)
+ * 
+ * @param pubkeys - All participants (including sender and recipients)
+ * @returns Conversation ID string
+ */
+export function createConversationId(pubkeys: string[]): string {
+  // Remove duplicates and sort for consistency
+  const uniqueSorted = [...new Set(pubkeys)].sort();
+  
+  // Single participant = 1-on-1 (return their pubkey)
+  if (uniqueSorted.length === 1) {
+    return uniqueSorted[0];
+  }
+  
+  // Multiple participants = group chat
+  return `group:${uniqueSorted.join(',')}`;
+}
+
+/**
+ * Parse a conversation ID to get all participant pubkeys
+ * 
+ * @param conversationId - Either a pubkey or "group:pubkey1,pubkey2,pubkey3"
+ * @returns Array of participant pubkeys
+ */
+export function parseConversationId(conversationId: string): string[] {
+  if (conversationId.startsWith('group:')) {
+    return conversationId.substring(6).split(',');
+  }
+  return [conversationId];
+}
+
+/**
+ * Check if a conversation ID represents a group chat
+ */
+export function isGroupConversation(conversationId: string): boolean {
+  return conversationId.startsWith('group:');
+}

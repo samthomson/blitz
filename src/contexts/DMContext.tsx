@@ -5,7 +5,7 @@ import { useNostr } from '@nostrify/react';
 import { useAppContext } from '@/hooks/useAppContext';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { useToast } from '@/hooks/useToast';
-import { validateDMEvent } from '@/lib/dmUtils';
+import { validateDMEvent, createConversationId, parseConversationId } from '@/lib/dmUtils';
 import { LOADING_PHASES, type LoadingPhase, PROTOCOL_MODE, type ProtocolMode } from '@/lib/dmConstants';
 import { NSecSigner, type NostrEvent } from '@nostrify/nostrify';
 import { generateSecretKey } from 'nostr-tools';
@@ -1103,10 +1103,7 @@ export function DMProvider({ children, config }: DMProviderProps) {
         };
       }
 
-      // Determine conversation ID based on participants
-      // For NIP-17, the conversation is defined by the set of pubkeys in p tags
-      let conversationPartner: string;
-
+      // Determine conversation ID based on ALL participants (sender + recipients)
       // Get all p tags (recipients)
       const allRecipients = messageEvent.tags
         .filter(([name]) => name === 'p')
@@ -1125,18 +1122,15 @@ export function DMProvider({ children, config }: DMProviderProps) {
         };
       }
 
-      // For group chats (multiple p tags), create a group ID
-      if (allRecipients.length > 1) {
-        // Create sorted group ID for consistent identification
-        const sortedRecipients = [...allRecipients].sort();
-        conversationPartner = `group:${sortedRecipients.join(',')}`;
-      } else if (sealEvent.pubkey === user.pubkey) {
-        // Message sent by me - conversation partner is the recipient
-        conversationPartner = allRecipients[0];
-      } else {
-        // Message sent to me - conversation partner is the sender
-        conversationPartner = sealEvent.pubkey;
-      }
+      // Get the sender from the seal (the person who actually sent the message)
+      const sender = sealEvent.pubkey;
+
+      // Create conversation ID from ALL participants: sender + all recipients
+      // This ensures everyone in the group has the same conversation ID
+      // For 1-on-1: returns just the other person's pubkey
+      // For groups: returns "group:alice,bob,charlie" (sorted)
+      const allParticipants = [sender, ...allRecipients];
+      const conversationPartner = createConversationId(allParticipants);
 
       return {
         processedMessage: {
@@ -1705,21 +1699,22 @@ export function DMProvider({ children, config }: DMProviderProps) {
     const { recipientPubkey, content, protocol = MESSAGE_PROTOCOL.NIP04, attachments } = params;
     if (!userPubkey) return;
 
-    // Parse group ID if needed (format: "group:pubkey1,pubkey2,pubkey3")
+    // Parse recipients and create conversation ID
     let recipients: string[];
-    let conversationId: string;
 
     if (typeof recipientPubkey === 'string' && recipientPubkey.startsWith('group:')) {
-      // Extract pubkeys from group ID
-      recipients = recipientPubkey.substring(6).split(',');
-      conversationId = recipientPubkey;
+      // Extract pubkeys from group ID (which includes sender)
+      const allParticipants = parseConversationId(recipientPubkey);
+      // Recipients are everyone except the sender
+      recipients = allParticipants.filter(p => p !== userPubkey);
     } else if (Array.isArray(recipientPubkey)) {
       recipients = recipientPubkey;
-      conversationId = recipients.length === 1 ? recipients[0] : `group:${[...recipients].sort().join(',')}`;
     } else {
       recipients = [recipientPubkey];
-      conversationId = recipientPubkey;
     }
+
+    // Create conversation ID from all participants (sender + recipients)
+    const conversationId = createConversationId([userPubkey, ...recipients]);
 
     console.log('[DM] Sending message:', {
       recipients,
