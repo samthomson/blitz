@@ -129,13 +129,23 @@ const ConversationItemComponent = ({
   const allParticipants = parseConversationId(pubkey);
   const conversationParticipants = allParticipants.filter(pk => pk !== user?.pubkey);
 
+  // Check if this is a self-messaging conversation
+  const isSelfMessaging = conversationParticipants.length === 0;
+
   // Fetch profile data for participants (used in display name logic)
-  const firstParticipant = useAuthor(conversationParticipants[0]);
+  const displayPubkey = isSelfMessaging ? user?.pubkey : conversationParticipants[0];
+  const firstParticipant = useAuthor(displayPubkey || '');
   const secondParticipant = useAuthor(conversationParticipants[1] || '');
   
   const firstMetadata = firstParticipant.data?.metadata;
 
   const getDisplayName = () => {
+    // Self-messaging conversation
+    if (isSelfMessaging) {
+      const selfName = firstMetadata?.name || genUserName(user?.pubkey || '');
+      return `${selfName} (You)`;
+    }
+
     // If only one other person, show their name (1-on-1)
     if (conversationParticipants.length === 1) {
       return firstMetadata?.name || genUserName(conversationParticipants[0]);
@@ -160,7 +170,7 @@ const ConversationItemComponent = ({
     : lastMessage?.decryptedContent || 'No messages yet';
 
   // Show skeleton only for name/avatar while loading (we already have message data)
-  const isLoadingProfile = conversationParticipants.length === 1 && firstParticipant.isLoading && !firstMetadata;
+  const isLoadingProfile = !isSelfMessaging && conversationParticipants.length === 1 && firstParticipant.isLoading && !firstMetadata;
 
   return (
     <button
@@ -174,7 +184,7 @@ const ConversationItemComponent = ({
         {isLoadingProfile ? (
           <Skeleton className="h-10 w-10 rounded-full flex-shrink-0" />
         ) : (
-          <GroupAvatar pubkeys={conversationParticipants} />
+          <GroupAvatar pubkeys={isSelfMessaging ? [user!.pubkey] : conversationParticipants} />
         )}
 
         <div className="flex-1 min-w-0">

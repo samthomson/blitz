@@ -250,18 +250,26 @@ const ChatHeader = ({ conversationId, onBack }: { conversationId: string; onBack
   const allParticipants = parseConversationId(conversationId);
   const conversationParticipants = allParticipants.filter(pk => pk !== user?.pubkey);
 
-  // For 1-on-1 chats, fetch the single participant's profile
-  const singleParticipant = useAuthor(conversationParticipants[0]);
+  // Check if this is a self-messaging conversation
+  const isSelfMessaging = conversationParticipants.length === 0;
+
+  // For 1-on-1 chats, fetch the single participant's profile (or self if messaging yourself)
+  const displayPubkey = isSelfMessaging ? user?.pubkey : conversationParticipants[0];
+  const singleParticipant = useAuthor(displayPubkey || '');
   const metadata = singleParticipant.data?.metadata;
 
   // Derive display values
   const isMultiPerson = conversationParticipants.length > 1;
   const displayName = isMultiPerson 
     ? null // Will use ParticipantNames component
-    : metadata?.name || genUserName(conversationParticipants[0]);
+    : isSelfMessaging
+      ? `${metadata?.name || genUserName(user?.pubkey || '')} (You)`
+      : metadata?.name || genUserName(displayPubkey || '');
   const subtitle = isMultiPerson
     ? `${conversationParticipants.length} other participants`
-    : metadata?.nip05;
+    : isSelfMessaging
+      ? 'Private notes to yourself'
+      : metadata?.nip05;
 
   return (
     <div className="p-4 border-b flex items-center gap-3">
@@ -276,7 +284,7 @@ const ChatHeader = ({ conversationId, onBack }: { conversationId: string; onBack
         </Button>
       )}
 
-      <GroupAvatar pubkeys={conversationParticipants} />
+      <GroupAvatar pubkeys={isSelfMessaging ? [user!.pubkey] : conversationParticipants} />
 
       <div className="flex-1 min-w-0">
         <h2 className="font-semibold truncate">

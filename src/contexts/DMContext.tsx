@@ -512,7 +512,8 @@ export function DMProvider({ children, config }: DMProviderProps) {
 
       // Step 2: Create Kind 13 Seal events and Kind 1059 Gift Wraps for each recipient + sender
       // For NIP-17 group chats, we send a separate gift wrap to each participant
-      const allRecipients = [...recipients, user.pubkey]; // Include sender for message history
+      // Deduplicate to avoid sending duplicate gift wraps for self-messaging
+      const allRecipients = [...new Set([...recipients, user.pubkey])];
       const giftWraps: NostrEvent[] = [];
 
       for (const recipientPubkey of allRecipients) {
@@ -735,7 +736,7 @@ export function DMProvider({ children, config }: DMProviderProps) {
           const recipientPTag = message.tags?.find(([name]) => name === 'p')?.[1];
           const otherPubkey = isFromUser ? recipientPTag : message.pubkey;
 
-          if (!otherPubkey || otherPubkey === user?.pubkey) continue;
+          if (!otherPubkey) continue;
 
           const { decryptedContent, error } = await decryptNIP4Message(message, otherPubkey);
 
@@ -1027,7 +1028,7 @@ export function DMProvider({ children, config }: DMProviderProps) {
     const recipientPTag = event.tags?.find(([name]) => name === 'p')?.[1];
     const otherPubkey = isFromUser ? recipientPTag : event.pubkey;
 
-    if (!otherPubkey || otherPubkey === user.pubkey) return;
+    if (!otherPubkey) return;
 
     const { decryptedContent, error } = await decryptNIP4Message(event, otherPubkey);
 
@@ -1711,6 +1712,11 @@ export function DMProvider({ children, config }: DMProviderProps) {
       const allParticipants = parseConversationId(recipientPubkey);
       // Recipients are everyone except the sender
       recipients = allParticipants.filter(p => p !== userPubkey);
+      
+      // For self-messaging, ensure we include ourselves as the recipient
+      if (recipients.length === 0 && allParticipants.length === 1) {
+        recipients = [userPubkey];
+      }
     } else if (Array.isArray(recipientPubkey)) {
       recipients = recipientPubkey;
     } else {
