@@ -98,42 +98,57 @@ export function formatFullDateTime(timestamp: number): string {
 }
 
 /**
- * Create a consistent conversation ID from a set of participants
- * For 1-on-1: returns the single pubkey
- * For groups: returns "group:pubkey1,pubkey2,pubkey3" (sorted)
+ * Create a conversation ID from all participants.
  * 
- * @param pubkeys - All participants (including sender and recipients)
- * @returns Conversation ID string
+ * Always returns "group:sorted,pubkey,list" format for consistency.
+ * This makes 1-on-1 and group chats use the same format, enables self-messaging,
+ * and ensures both parties see the exact same conversation ID.
+ * 
+ * Examples:
+ * - Self: "group:alice"
+ * - 1-on-1: "group:alice,bob" (both Alice and Bob see this same ID)
+ * - Group: "group:alice,bob,charlie"
+ * 
+ * @param allParticipants - All participant pubkeys including current user
+ * @returns Conversation ID in "group:..." format
  */
-export function createConversationId(pubkeys: string[]): string {
-  // Remove duplicates and sort for consistency
-  const uniqueSorted = [...new Set(pubkeys)].sort();
-  
-  // Single participant = 1-on-1 (return their pubkey)
-  if (uniqueSorted.length === 1) {
-    return uniqueSorted[0];
-  }
-  
-  // Multiple participants = group chat
+export function createConversationId(allParticipants: string[]): string {
+  const uniqueSorted = [...new Set(allParticipants)].sort();
   return `group:${uniqueSorted.join(',')}`;
 }
 
 /**
- * Parse a conversation ID to get all participant pubkeys
+ * Parse a conversation ID to get all participant pubkeys.
  * 
- * @param conversationId - Either a pubkey or "group:pubkey1,pubkey2,pubkey3"
+ * Handles both formats for backwards compatibility:
+ * - New: "group:alice,bob" 
+ * - Old: "bob" (bare pubkey from before this refactor)
+ * 
+ * @param conversationId - Either "group:pubkey1,pubkey2" or bare pubkey (legacy)
  * @returns Array of participant pubkeys
  */
 export function parseConversationId(conversationId: string): string[] {
   if (conversationId.startsWith('group:')) {
     return conversationId.substring(6).split(',');
   }
+  // Legacy format: bare pubkey (treat as 1-on-1)
   return [conversationId];
 }
 
 /**
- * Check if a conversation ID represents a group chat
+ * Check if a conversation represents a multi-person group (3+ participants).
+ * 
+ * Note: With the new format, all conversations use "group:..." format,
+ * but this function specifically checks for 3+ people (actual group chats).
+ * 
+ * - Self-messaging: "group:alice" → false (1 person)
+ * - 1-on-1: "group:alice,bob" → false (2 people)
+ * - Group: "group:alice,bob,charlie" → true (3+ people)
+ * 
+ * @param conversationId - Conversation ID to check
+ * @returns true if 3+ participants (actual group chat)
  */
 export function isGroupConversation(conversationId: string): boolean {
-  return conversationId.startsWith('group:');
+  const participants = parseConversationId(conversationId);
+  return participants.length >= 3;
 }

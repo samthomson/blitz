@@ -18,7 +18,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
-import { createConversationId } from '@/lib/dmUtils';
+import { createConversationId, parseConversationId } from '@/lib/dmUtils';
 
 interface NewConversationDialogProps {
   onStartConversation: (pubkey: string) => void;
@@ -39,12 +39,17 @@ export function NewConversationDialog({ onStartConversation }: NewConversationDi
   const { data: follows = [], isLoading: isLoadingFollows } = useFollows();
 
   const allContacts = useMemo(() => {
+    // Extract individual pubkeys from conversations (including group members)
     const knownConversationPubkeys = conversations
       .filter(c => c.isKnown)
-      .map(c => c.pubkey);
+      .flatMap(c => parseConversationId(c.pubkey));
     
-    return Array.from(new Set([...follows, ...knownConversationPubkeys]));
-  }, [follows, conversations]);
+    // Remove current user from contacts (don't show yourself in the list)
+    const contactsWithoutSelf = [...follows, ...knownConversationPubkeys]
+      .filter(pubkey => pubkey !== user?.pubkey);
+    
+    return Array.from(new Set(contactsWithoutSelf));
+  }, [follows, conversations, user?.pubkey]);
 
   // Include selected pubkeys in metadata fetch (for manually added pubkeys)
   const pubkeysToFetch = useMemo(() => {
@@ -203,9 +208,7 @@ export function NewConversationDialog({ onStartConversation }: NewConversationDi
       return;
     }
 
-    // Create conversation ID including current user + all selected recipients
-    // For 1-on-1: returns just the other person's pubkey
-    // For groups: returns "group:alice,bob,charlie" (sorted)
+    // Create conversation ID from all participants (including current user)
     const conversationId = createConversationId([user.pubkey, ...selectedPubkeys]);
     onStartConversation(conversationId);
     

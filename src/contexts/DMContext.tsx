@@ -1125,10 +1125,7 @@ export function DMProvider({ children, config }: DMProviderProps) {
       // Get the sender from the seal (the person who actually sent the message)
       const sender = sealEvent.pubkey;
 
-      // Create conversation ID from ALL participants: sender + all recipients
-      // This ensures everyone in the group has the same conversation ID
-      // For 1-on-1: returns just the other person's pubkey
-      // For groups: returns "group:alice,bob,charlie" (sorted)
+      // Create conversation ID from all participants (sender + recipients)
       const allParticipants = [sender, ...allRecipients];
       const conversationPartner = createConversationId(allParticipants);
 
@@ -1713,7 +1710,7 @@ export function DMProvider({ children, config }: DMProviderProps) {
       recipients = [recipientPubkey];
     }
 
-    // Create conversation ID from all participants (sender + recipients)
+    // Create conversation ID from all participants (including current user)
     const conversationId = createConversationId([userPubkey, ...recipients]);
 
     console.log('[DM] Sending message:', {

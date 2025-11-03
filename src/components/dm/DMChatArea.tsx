@@ -4,7 +4,7 @@ import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useAuthor } from '@/hooks/useAuthor';
 import { genUserName } from '@/lib/genUserName';
 import { MESSAGE_PROTOCOL, PROTOCOL_MODE, type MessageProtocol } from '@/lib/dmConstants';
-import { formatConversationTime, formatFullDateTime, parseConversationId, isGroupConversation } from '@/lib/dmUtils';
+import { formatConversationTime, formatFullDateTime, parseConversationId } from '@/lib/dmUtils';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -228,13 +228,15 @@ const ParticipantNames = ({ pubkeys }: { pubkeys: string[] }) => {
 };
 
 const ChatHeader = ({ pubkey, onBack }: { pubkey: string; onBack?: () => void }) => {
-  // Check if this is a group chat and parse pubkeys
-  const isGroup = isGroupConversation(pubkey);
-  const pubkeys = parseConversationId(pubkey);
+  const { user } = useCurrentUser();
+  
+  // Parse conversation participants and exclude current user from display
+  const allParticipants = parseConversationId(pubkey);
+  const conversationParticipants = allParticipants.filter(pk => pk !== user?.pubkey);
 
-  // For individual chats
-  const author = useAuthor(pubkeys[0]);
-  const metadata = author.data?.metadata;
+  // For 1-on-1 chats, fetch the single participant's profile
+  const singleParticipant = useAuthor(conversationParticipants[0]);
+  const metadata = singleParticipant.data?.metadata;
 
   return (
     <div className="p-4 border-b flex items-center gap-3">
@@ -249,17 +251,17 @@ const ChatHeader = ({ pubkey, onBack }: { pubkey: string; onBack?: () => void })
         </Button>
       )}
 
-      <GroupAvatar pubkeys={pubkeys} />
+      <GroupAvatar pubkeys={conversationParticipants} />
 
       <div className="flex-1 min-w-0">
         <h2 className="font-semibold truncate">
-          {isGroup ? <ParticipantNames pubkeys={pubkeys} /> : (metadata?.name || genUserName(pubkeys[0]))}
+          {conversationParticipants.length > 1 ? <ParticipantNames pubkeys={conversationParticipants} /> : (metadata?.name || genUserName(conversationParticipants[0]))}
         </h2>
-        {!isGroup && metadata?.nip05 && (
+        {conversationParticipants.length === 1 && metadata?.nip05 && (
           <p className="text-xs text-muted-foreground truncate">{metadata.nip05}</p>
         )}
-        {isGroup && (
-          <p className="text-xs text-muted-foreground">{pubkeys.length} participants</p>
+        {conversationParticipants.length > 1 && (
+          <p className="text-xs text-muted-foreground">{conversationParticipants.length} participants</p>
         )}
       </div>
     </div>

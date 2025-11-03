@@ -1,9 +1,10 @@
 import { useMemo, useState, memo } from 'react';
 import { Info, Loader2 } from 'lucide-react';
 import { useDMContext } from '@/contexts/DMContext';
+import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useAuthor } from '@/hooks/useAuthor';
 import { genUserName } from '@/lib/genUserName';
-import { formatConversationTime, formatFullDateTime, parseConversationId, isGroupConversation } from '@/lib/dmUtils';
+import { formatConversationTime, formatFullDateTime, parseConversationId } from '@/lib/dmUtils';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -119,30 +120,33 @@ const ConversationItemComponent = ({
   lastMessage,
   lastActivity,
 }: ConversationItemProps) => {
-  // Check if this is a group and parse pubkeys
-  const isGroup = isGroupConversation(pubkey);
-  const pubkeys = parseConversationId(pubkey);
+  const { user } = useCurrentUser();
+  
+  // Parse conversation participants and exclude current user from display
+  const allParticipants = parseConversationId(pubkey);
+  const conversationParticipants = allParticipants.filter(pk => pk !== user?.pubkey);
 
-  // For individual chats
-  const author = useAuthor(pubkeys[0]);
-  const metadata = author.data?.metadata;
-
-  // For group chats, get first 2 names
-  const author2 = useAuthor(pubkeys[1] || '');
+  // Fetch profile data for participants (used in display name logic)
+  const firstParticipant = useAuthor(conversationParticipants[0]);
+  const secondParticipant = useAuthor(conversationParticipants[1] || '');
+  
+  const firstMetadata = firstParticipant.data?.metadata;
 
   const getDisplayName = () => {
-    if (!isGroup) {
-      return metadata?.name || genUserName(pubkeys[0]);
+    // If only one other person, show their name (1-on-1)
+    if (conversationParticipants.length === 1) {
+      return firstMetadata?.name || genUserName(conversationParticipants[0]);
     }
 
-    const name1 = metadata?.name || genUserName(pubkeys[0]);
-    const name2 = author2.data?.metadata?.name || genUserName(pubkeys[1]);
+    // Multiple people - show first 2 names + remaining count
+    const firstName = firstMetadata?.name || genUserName(conversationParticipants[0]);
+    const secondName = secondParticipant.data?.metadata?.name || genUserName(conversationParticipants[1]);
 
-    if (pubkeys.length === 2) {
-      return `${name1}, ${name2}`;
+    if (conversationParticipants.length === 2) {
+      return `${firstName}, ${secondName}`;
     } else {
-      const remaining = pubkeys.length - 2;
-      return `${name1}, ${name2}, +${remaining}`;
+      const remaining = conversationParticipants.length - 2;
+      return `${firstName}, ${secondName}, +${remaining}`;
     }
   };
 
@@ -153,7 +157,7 @@ const ConversationItemComponent = ({
     : lastMessage?.decryptedContent || 'No messages yet';
 
   // Show skeleton only for name/avatar while loading (we already have message data)
-  const isLoadingProfile = !isGroup && author.isLoading && !metadata;
+  const isLoadingProfile = conversationParticipants.length === 1 && firstParticipant.isLoading && !firstMetadata;
 
   return (
     <button
@@ -167,7 +171,7 @@ const ConversationItemComponent = ({
         {isLoadingProfile ? (
           <Skeleton className="h-10 w-10 rounded-full flex-shrink-0" />
         ) : (
-          <GroupAvatar pubkeys={pubkeys} />
+          <GroupAvatar pubkeys={conversationParticipants} />
         )}
 
         <div className="flex-1 min-w-0">
