@@ -751,11 +751,15 @@ export function DMProvider({ children, config }: DMProviderProps) {
             decryptedMessage.clientFirstSeen = Date.now();
           }
 
-          if (!newState.has(otherPubkey)) {
-            newState.set(otherPubkey, createEmptyParticipant());
+          // Use consistent conversation ID format (same as NIP-17)
+          // For NIP-04, this is always a 1-on-1 conversation
+          const conversationId = createConversationId([userPubkey, otherPubkey]);
+
+          if (!newState.has(conversationId)) {
+            newState.set(conversationId, createEmptyParticipant());
           }
 
-          const participant = newState.get(otherPubkey)!;
+          const participant = newState.get(conversationId)!;
           participant.messages.push(decryptedMessage);
           participant.hasNIP4 = true;
         }
@@ -1039,7 +1043,10 @@ export function DMProvider({ children, config }: DMProviderProps) {
       decryptedMessage.clientFirstSeen = Date.now();
     }
 
-    addMessageToState(decryptedMessage, otherPubkey, MESSAGE_PROTOCOL.NIP04, user.pubkey);
+    // Use consistent conversation ID format (same as NIP-17)
+    const conversationId = createConversationId([user.pubkey, otherPubkey]);
+
+    addMessageToState(decryptedMessage, conversationId, MESSAGE_PROTOCOL.NIP04, user.pubkey);
   }, [user, decryptNIP4Message, addMessageToState]);
 
   // Process NIP-17 Gift Wrap
