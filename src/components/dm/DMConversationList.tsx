@@ -4,7 +4,7 @@ import { useDMContext } from '@/contexts/DMContext';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useAuthor } from '@/hooks/useAuthor';
 import { genUserName } from '@/lib/genUserName';
-import { formatConversationTime, formatFullDateTime, parseConversationId } from '@/lib/dmUtils';
+import { formatConversationTime, formatFullDateTime, parseConversationId, getPubkeyColor } from '@/lib/dmUtils';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -44,11 +44,12 @@ const GroupAvatar = ({ pubkeys }: { pubkeys: string[] }) => {
     const displayName = metadata?.name || genUserName(pubkeys[0]);
     const avatarUrl = metadata?.picture;
     const initials = displayName.slice(0, 2).toUpperCase();
+    const bgColor = getPubkeyColor(pubkeys[0]);
 
     return (
       <Avatar className="h-10 w-10 flex-shrink-0">
         <AvatarImage src={avatarUrl} alt={displayName} />
-        <AvatarFallback>{initials}</AvatarFallback>
+        <AvatarFallback className={cn(bgColor, "text-white")}>{initials}</AvatarFallback>
       </Avatar>
     );
   }
@@ -61,6 +62,7 @@ const GroupAvatar = ({ pubkeys }: { pubkeys: string[] }) => {
           const author = authors[index];
           const metadata = author?.data?.metadata;
           const avatarUrl = metadata?.picture;
+          const bgColor = getPubkeyColor(pubkey);
 
           return (
             <div
@@ -71,7 +73,7 @@ const GroupAvatar = ({ pubkeys }: { pubkeys: string[] }) => {
               {avatarUrl ? (
                 <img src={avatarUrl} alt="" className="h-full w-full object-cover" />
               ) : (
-                <div className="h-full w-full bg-muted" />
+                <div className={cn("h-full w-full", bgColor)} />
               )}
             </div>
           );
@@ -87,6 +89,7 @@ const GroupAvatar = ({ pubkeys }: { pubkeys: string[] }) => {
         const author = authors[index];
         const metadata = author?.data?.metadata;
         const avatarUrl = metadata?.picture;
+        const bgColor = getPubkeyColor(pubkey);
 
         const positions = [
           { top: 0, left: 0 }, // top-left
@@ -104,7 +107,7 @@ const GroupAvatar = ({ pubkeys }: { pubkeys: string[] }) => {
             {avatarUrl ? (
               <img src={avatarUrl} alt="" className="h-full w-full object-cover" />
             ) : (
-              <div className="h-full w-full bg-muted" />
+              <div className={cn("h-full w-full", bgColor)} />
             )}
           </div>
         );

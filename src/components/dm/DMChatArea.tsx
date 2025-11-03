@@ -4,7 +4,7 @@ import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useAuthor } from '@/hooks/useAuthor';
 import { genUserName } from '@/lib/genUserName';
 import { MESSAGE_PROTOCOL, PROTOCOL_MODE, type MessageProtocol } from '@/lib/dmConstants';
-import { formatConversationTime, formatFullDateTime, parseConversationId } from '@/lib/dmUtils';
+import { formatConversationTime, formatFullDateTime, parseConversationId, getPubkeyColor } from '@/lib/dmUtils';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -22,38 +22,6 @@ interface DMChatAreaProps {
   onBack?: () => void;
   className?: string;
 }
-
-// Generate consistent color for a pubkey (used for sender names in group chats)
-// Uses darker shades in light mode, lighter shades in dark mode for proper contrast
-const getPubkeyColor = (pubkey: string): string => {
-  const colors = [
-    'text-red-600 dark:text-red-400',
-    'text-orange-600 dark:text-orange-400', 
-    'text-amber-600 dark:text-amber-400',
-    'text-yellow-600 dark:text-yellow-400',
-    'text-lime-600 dark:text-lime-400',
-    'text-green-600 dark:text-green-400',
-    'text-emerald-600 dark:text-emerald-400',
-    'text-teal-600 dark:text-teal-400',
-    'text-cyan-600 dark:text-cyan-400',
-    'text-sky-600 dark:text-sky-400',
-    'text-blue-600 dark:text-blue-400',
-    'text-indigo-600 dark:text-indigo-400',
-    'text-violet-600 dark:text-violet-400',
-    'text-purple-600 dark:text-purple-400',
-    'text-fuchsia-600 dark:text-fuchsia-400',
-    'text-pink-600 dark:text-pink-400',
-    'text-rose-600 dark:text-rose-400',
-  ];
-  
-  // Hash pubkey to get consistent color index
-  let hash = 0;
-  for (let i = 0; i < pubkey.length; i++) {
-    hash = ((hash << 5) - hash) + pubkey.charCodeAt(i);
-    hash = hash & hash;
-  }
-  return colors[Math.abs(hash) % colors.length];
-};
 
 const MessageBubble = memo(({
   message,
@@ -83,7 +51,7 @@ const MessageBubble = memo(({
   const senderProfile = useAuthor(message.pubkey);
   const metadata = senderProfile.data?.metadata;
   const senderName = metadata?.display_name || metadata?.name || genUserName(message.pubkey);
-  const senderColor = getPubkeyColor(message.pubkey);
+  const senderTextColor = getPubkeyColor(message.pubkey, 'text');
 
   // Create a NostrEvent object for NoteContent (only used for kind 15)
   // For NIP-17 file attachments, use the decryptedEvent which has the actual tags
@@ -106,7 +74,7 @@ const MessageBubble = memo(({
           : "bg-muted"
       )}>
         {showSenderName && !isFromCurrentUser && (
-          <div className={cn("text-xs font-semibold mb-1", senderColor)}>
+          <div className={cn("text-xs font-semibold mb-1", senderTextColor)}>
             {senderName}
           </div>
         )}
@@ -185,11 +153,12 @@ const GroupAvatar = ({ pubkeys }: { pubkeys: string[] }) => {
     const displayName = metadata?.name || genUserName(pubkeys[0]);
     const avatarUrl = metadata?.picture;
     const initials = displayName.slice(0, 2).toUpperCase();
+    const bgColor = getPubkeyColor(pubkeys[0]);
 
     return (
       <Avatar className="h-10 w-10">
         <AvatarImage src={avatarUrl} alt={displayName} />
-        <AvatarFallback>{initials}</AvatarFallback>
+        <AvatarFallback className={cn(bgColor, "text-white")}>{initials}</AvatarFallback>
       </Avatar>
     );
   }
@@ -202,6 +171,7 @@ const GroupAvatar = ({ pubkeys }: { pubkeys: string[] }) => {
           const author = authors[index];
           const metadata = author?.data?.metadata;
           const avatarUrl = metadata?.picture;
+          const bgColor = getPubkeyColor(pubkey);
 
           return (
             <div
@@ -212,7 +182,7 @@ const GroupAvatar = ({ pubkeys }: { pubkeys: string[] }) => {
               {avatarUrl ? (
                 <img src={avatarUrl} alt="" className="h-full w-full object-cover" />
               ) : (
-                <div className="h-full w-full bg-muted" />
+                <div className={cn("h-full w-full", bgColor)} />
               )}
             </div>
           );
@@ -228,6 +198,7 @@ const GroupAvatar = ({ pubkeys }: { pubkeys: string[] }) => {
         const author = authors[index];
         const metadata = author?.data?.metadata;
         const avatarUrl = metadata?.picture;
+        const bgColor = getPubkeyColor(pubkey);
 
         const positions = [
           { top: 0, left: 0 }, // top-left
@@ -245,7 +216,7 @@ const GroupAvatar = ({ pubkeys }: { pubkeys: string[] }) => {
             {avatarUrl ? (
               <img src={avatarUrl} alt="" className="h-full w-full object-cover" />
             ) : (
-              <div className="h-full w-full bg-muted" />
+              <div className={cn("h-full w-full", bgColor)} />
             )}
           </div>
         );

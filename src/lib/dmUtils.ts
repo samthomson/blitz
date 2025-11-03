@@ -136,6 +136,47 @@ export function parseConversationId(conversationId: string): string[] {
 }
 
 /**
+ * Generate a consistent color for a pubkey (used for avatars and names).
+ * Uses darker shades in light mode, lighter shades in dark mode for proper contrast.
+ * 
+ * @param pubkey - The user's public key
+ * @param variant - 'bg' for background colors (avatars), 'text' for text colors (names)
+ * @returns Tailwind color class string with dark mode variant
+ */
+export function getPubkeyColor(pubkey: string, variant: 'bg' | 'text' = 'bg'): string {
+  const colors = [
+    'red-600 dark:red-400',
+    'orange-600 dark:orange-400', 
+    'amber-600 dark:amber-400',
+    'yellow-600 dark:yellow-400',
+    'lime-600 dark:lime-400',
+    'green-600 dark:green-400',
+    'emerald-600 dark:emerald-400',
+    'teal-600 dark:teal-400',
+    'cyan-600 dark:cyan-400',
+    'sky-600 dark:sky-400',
+    'blue-600 dark:blue-400',
+    'indigo-600 dark:indigo-400',
+    'violet-600 dark:violet-400',
+    'purple-600 dark:purple-400',
+    'fuchsia-600 dark:fuchsia-400',
+    'pink-600 dark:pink-400',
+    'rose-600 dark:rose-400',
+  ];
+  
+  // Hash pubkey to get consistent color index
+  let hash = 0;
+  for (let i = 0; i < pubkey.length; i++) {
+    hash = ((hash << 5) - hash) + pubkey.charCodeAt(i);
+    hash = hash & hash;
+  }
+  
+  const colorValue = colors[Math.abs(hash) % colors.length];
+  const prefix = variant === 'bg' ? 'bg-' : 'text-';
+  return colorValue.replace(/(\w+-\d+)/g, `${prefix}$1`);
+}
+
+/**
  * Check if a conversation represents a multi-person group (3+ participants).
  * 
  * Note: With the new format, all conversations use "group:..." format,
