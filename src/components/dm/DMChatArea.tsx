@@ -238,6 +238,15 @@ const ChatHeader = ({ pubkey, onBack }: { pubkey: string; onBack?: () => void })
   const singleParticipant = useAuthor(conversationParticipants[0]);
   const metadata = singleParticipant.data?.metadata;
 
+  // Derive display values
+  const isMultiPerson = conversationParticipants.length > 1;
+  const displayName = isMultiPerson 
+    ? null // Will use ParticipantNames component
+    : metadata?.name || genUserName(conversationParticipants[0]);
+  const subtitle = isMultiPerson
+    ? `${conversationParticipants.length} other participants`
+    : metadata?.nip05;
+
   return (
     <div className="p-4 border-b flex items-center gap-3">
       {onBack && (
@@ -255,13 +264,10 @@ const ChatHeader = ({ pubkey, onBack }: { pubkey: string; onBack?: () => void })
 
       <div className="flex-1 min-w-0">
         <h2 className="font-semibold truncate">
-          {conversationParticipants.length > 1 ? <ParticipantNames pubkeys={conversationParticipants} /> : (metadata?.name || genUserName(conversationParticipants[0]))}
+          {isMultiPerson ? <ParticipantNames pubkeys={conversationParticipants} /> : displayName}
         </h2>
-        {conversationParticipants.length === 1 && metadata?.nip05 && (
-          <p className="text-xs text-muted-foreground truncate">{metadata.nip05}</p>
-        )}
-        {conversationParticipants.length > 1 && (
-          <p className="text-xs text-muted-foreground">{conversationParticipants.length} participants</p>
+        {subtitle && (
+          <p className="text-xs text-muted-foreground truncate">{subtitle}</p>
         )}
       </div>
     </div>
