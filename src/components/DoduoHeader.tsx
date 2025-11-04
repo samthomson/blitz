@@ -88,7 +88,7 @@ function AdvancedContent() {
               Developer Mode
             </Label>
             <span className="text-xs text-muted-foreground">
-              Enable developer tools and debug features
+              See what&apos;s going on under the hood.
             </span>
           </div>
           <Switch
