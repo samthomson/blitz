@@ -1,4 +1,4 @@
-import { MessageSquare, Moon, Sun, Settings, Info, Palette, Database } from 'lucide-react';
+import { MessageSquare, Moon, Sun, Settings, Info, Palette, Database, ChevronRight, ArrowLeft } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { useTheme } from '@/hooks/useTheme';
@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
+import { cn } from '@/lib/utils';
 
 interface DoduoHeaderProps {
   onStatusClick?: () => void;
@@ -21,6 +22,7 @@ interface DoduoHeaderProps {
 export function DoduoHeader({ onStatusClick }: DoduoHeaderProps) {
   const { theme, setTheme } = useTheme();
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [mobileCategory, setMobileCategory] = useState<string | null>(null);
 
   return (
     <>
@@ -58,9 +60,38 @@ export function DoduoHeader({ onStatusClick }: DoduoHeaderProps) {
       </header>
 
       {/* Settings Modal */}
-      <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
+      <Dialog 
+        open={settingsOpen} 
+        onOpenChange={(open) => {
+          setSettingsOpen(open);
+          if (!open) setMobileCategory(null);
+        }}
+      >
         <DialogContent className="max-w-[95vw] sm:max-w-2xl md:max-w-3xl p-0">
-          <DialogHeader className="px-4 sm:px-6 pt-4 sm:pt-6 pb-3 sm:pb-4">
+          {/* Mobile: Show back button when category is selected */}
+          <DialogHeader className={cn(
+            "px-4 sm:px-6 pt-4 sm:pt-6 pb-3 sm:pb-4",
+            mobileCategory && "md:hidden"
+          )}>
+            {mobileCategory ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-fit -ml-2 mb-2 md:hidden"
+                onClick={() => setMobileCategory(null)}
+              >
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                Back
+              </Button>
+            ) : null}
+            <DialogTitle>{mobileCategory || 'Settings'}</DialogTitle>
+            <DialogDescription>
+              {mobileCategory ? '' : 'Manage your app preferences'}
+            </DialogDescription>
+          </DialogHeader>
+
+          {/* Desktop: Always show title */}
+          <DialogHeader className="hidden md:block px-6 pt-6 pb-4">
             <DialogTitle>Settings</DialogTitle>
             <DialogDescription>
               Manage your app preferences
@@ -69,25 +100,120 @@ export function DoduoHeader({ onStatusClick }: DoduoHeaderProps) {
           
           <Separator />
 
-          <Tabs defaultValue="appearance" className="flex flex-col md:flex-row min-h-[300px] md:min-h-[400px]">
-            <TabsList className="flex flex-row md:flex-col h-auto md:h-full w-full md:w-48 bg-transparent border-b md:border-b-0 md:border-r rounded-none p-2 gap-1 justify-start items-start">
+          {/* Mobile: Category list or selected category content */}
+          <div className="md:hidden min-h-[300px]">
+            {!mobileCategory ? (
+              // Category List
+              <div className="px-4 py-4 space-y-2">
+                <Button
+                  variant="ghost"
+                  className="w-full justify-between h-auto py-4 px-4"
+                  onClick={() => setMobileCategory('Appearance')}
+                >
+                  <div className="flex items-center gap-3">
+                    <Palette className="h-5 w-5" />
+                    <div className="flex flex-col items-start">
+                      <span className="font-medium">Appearance</span>
+                      <span className="text-xs text-muted-foreground">Theme and display</span>
+                    </div>
+                  </div>
+                  <ChevronRight className="h-5 w-5 text-muted-foreground" />
+                </Button>
+
+                <Button
+                  variant="ghost"
+                  className="w-full justify-between h-auto py-4 px-4"
+                  onClick={() => setMobileCategory('Storage')}
+                >
+                  <div className="flex items-center gap-3">
+                    <Database className="h-5 w-5" />
+                    <div className="flex flex-col items-start">
+                      <span className="font-medium">Storage</span>
+                      <span className="text-xs text-muted-foreground">Data and cache</span>
+                    </div>
+                  </div>
+                  <ChevronRight className="h-5 w-5 text-muted-foreground" />
+                </Button>
+              </div>
+            ) : mobileCategory === 'Appearance' ? (
+              // Appearance Category Content
+              <div className="px-4 py-4 space-y-4">
+                <div>
+                  <h3 className="text-sm font-semibold mb-3">Theme</h3>
+                  <Button
+                    variant="outline"
+                    className="w-full justify-start h-auto py-3 px-4"
+                    onClick={() => {
+                      setTheme(theme === 'dark' ? 'light' : 'dark');
+                    }}
+                  >
+                    {theme === 'dark' ? (
+                      <>
+                        <Sun className="mr-3 h-5 w-5" />
+                        <div className="flex flex-col items-start">
+                          <span className="font-medium">Light mode</span>
+                          <span className="text-xs text-muted-foreground">Switch to light theme</span>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <Moon className="mr-3 h-5 w-5" />
+                        <div className="flex flex-col items-start">
+                          <span className="font-medium">Dark mode</span>
+                          <span className="text-xs text-muted-foreground">Switch to dark theme</span>
+                        </div>
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+            ) : mobileCategory === 'Storage' ? (
+              // Storage Category Content
+              <div className="px-4 py-4 space-y-4">
+                <div>
+                  <h3 className="text-sm font-semibold mb-3">Data & Cache</h3>
+                  {onStatusClick && (
+                    <Button
+                      variant="outline"
+                      className="w-full justify-start h-auto py-3 px-4"
+                      onClick={() => {
+                        setSettingsOpen(false);
+                        setMobileCategory(null);
+                        onStatusClick();
+                      }}
+                    >
+                      <Info className="mr-3 h-5 w-5" />
+                      <div className="flex flex-col items-start">
+                        <span className="font-medium">Status & Info</span>
+                        <span className="text-xs text-muted-foreground">View messaging status and cache</span>
+                      </div>
+                    </Button>
+                  )}
+                </div>
+              </div>
+            ) : null}
+          </div>
+
+          {/* Desktop: Tabbed layout */}
+          <Tabs defaultValue="appearance" className="hidden md:flex min-h-[400px]">
+            <TabsList className="flex flex-col h-full w-48 bg-transparent border-r rounded-none p-2 gap-1 items-start">
               <TabsTrigger 
                 value="appearance" 
-                className="w-auto md:w-full justify-start gap-3 data-[state=active]:bg-accent"
+                className="w-full justify-start gap-3 data-[state=active]:bg-accent"
               >
                 <Palette className="h-4 w-4" />
-                <span className="hidden sm:inline">Appearance</span>
+                Appearance
               </TabsTrigger>
               <TabsTrigger 
                 value="storage" 
-                className="w-auto md:w-full justify-start gap-3 data-[state=active]:bg-accent"
+                className="w-full justify-start gap-3 data-[state=active]:bg-accent"
               >
                 <Database className="h-4 w-4" />
-                <span className="hidden sm:inline">Storage</span>
+                Storage
               </TabsTrigger>
             </TabsList>
 
-            <div className="flex-1 px-4 md:px-6 py-4">
+            <div className="flex-1 px-6 py-4">
               <TabsContent value="appearance" className="mt-0 space-y-4">
                 <div>
                   <h3 className="text-sm font-semibold mb-3">Theme</h3>
