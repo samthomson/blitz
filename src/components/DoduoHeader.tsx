@@ -20,10 +20,58 @@ interface SettingsModalProps {
   onOpenChange: (open: boolean) => void;
 }
 
-function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
+function AppearanceContent() {
   const { theme, setTheme } = useTheme();
-  const [mobileCategory, setMobileCategory] = useState<string | null>(null);
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <h3 className="text-sm font-semibold mb-3">Theme</h3>
+        <Button
+          variant="outline"
+          className="w-full justify-start h-auto py-3 px-4"
+          onClick={() => {
+            setTheme(theme === 'dark' ? 'light' : 'dark');
+          }}
+        >
+          {theme === 'dark' ? (
+            <>
+              <Sun className="mr-3 h-5 w-5" />
+              <div className="flex flex-col items-start">
+                <span className="font-medium">Light mode</span>
+                <span className="text-xs text-muted-foreground">Switch to light theme</span>
+              </div>
+            </>
+          ) : (
+            <>
+              <Moon className="mr-3 h-5 w-5" />
+              <div className="flex flex-col items-start">
+                <span className="font-medium">Dark mode</span>
+                <span className="text-xs text-muted-foreground">Switch to dark theme</span>
+              </div>
+            </>
+          )}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function StorageContent() {
   const { clearCacheAndRefetch } = useDMContext();
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <h3 className="text-sm font-semibold mb-3">Data & Cache</h3>
+        <DMStatusInfo clearCacheAndRefetch={clearCacheAndRefetch} />
+      </div>
+    </div>
+  );
+}
+
+function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
+  const [mobileCategory, setMobileCategory] = useState<string | null>(null);
 
   return (
     <Dialog 
@@ -102,44 +150,12 @@ function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
               </Button>
             </div>
           ) : mobileCategory === 'Appearance' ? (
-            // Appearance Category Content
-            <div className="px-4 py-4 space-y-4">
-              <div>
-                <h3 className="text-sm font-semibold mb-3">Theme</h3>
-                <Button
-                  variant="outline"
-                  className="w-full justify-start h-auto py-3 px-4"
-                  onClick={() => {
-                    setTheme(theme === 'dark' ? 'light' : 'dark');
-                  }}
-                >
-                  {theme === 'dark' ? (
-                    <>
-                      <Sun className="mr-3 h-5 w-5" />
-                      <div className="flex flex-col items-start">
-                        <span className="font-medium">Light mode</span>
-                        <span className="text-xs text-muted-foreground">Switch to light theme</span>
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <Moon className="mr-3 h-5 w-5" />
-                      <div className="flex flex-col items-start">
-                        <span className="font-medium">Dark mode</span>
-                        <span className="text-xs text-muted-foreground">Switch to dark theme</span>
-                      </div>
-                    </>
-                  )}
-                </Button>
-              </div>
+            <div className="px-4 py-4">
+              <AppearanceContent />
             </div>
           ) : mobileCategory === 'Storage' ? (
-            // Storage Category Content
-            <div className="px-4 py-4 space-y-4">
-              <div>
-                <h3 className="text-sm font-semibold mb-3">Data & Cache</h3>
-                <DMStatusInfo clearCacheAndRefetch={clearCacheAndRefetch} />
-              </div>
+            <div className="px-4 py-4">
+              <StorageContent />
             </div>
           ) : null}
         </div>
@@ -166,42 +182,12 @@ function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
           </div>
 
           <div className="flex-1 px-6 pb-4">
-            <TabsContent value="appearance" className="mt-0 space-y-4">
-              <div>
-                <h3 className="text-sm font-semibold mb-3">Theme</h3>
-                <Button
-                  variant="outline"
-                  className="w-full justify-start h-auto py-3 px-4"
-                  onClick={() => {
-                    setTheme(theme === 'dark' ? 'light' : 'dark');
-                  }}
-                >
-                  {theme === 'dark' ? (
-                    <>
-                      <Sun className="mr-3 h-5 w-5" />
-                      <div className="flex flex-col items-start">
-                        <span className="font-medium">Light mode</span>
-                        <span className="text-xs text-muted-foreground">Switch to light theme</span>
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <Moon className="mr-3 h-5 w-5" />
-                      <div className="flex flex-col items-start">
-                        <span className="font-medium">Dark mode</span>
-                        <span className="text-xs text-muted-foreground">Switch to dark theme</span>
-                      </div>
-                    </>
-                  )}
-                </Button>
-              </div>
+            <TabsContent value="appearance" className="mt-0">
+              <AppearanceContent />
             </TabsContent>
 
-            <TabsContent value="storage" className="mt-0 space-y-4">
-              <div>
-                <h3 className="text-sm font-semibold mb-3">Data & Cache</h3>
-                <DMStatusInfo clearCacheAndRefetch={clearCacheAndRefetch} />
-              </div>
+            <TabsContent value="storage" className="mt-0">
+              <StorageContent />
             </TabsContent>
           </div>
         </Tabs>
