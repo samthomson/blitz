@@ -62,40 +62,34 @@ const RawEventModal = ({
                 Message ({innerEvent.kind})
               </TabsTrigger>
             </TabsList>
-            <TabsContent value="giftwrap" className="flex-1 mt-4">
-              <ScrollArea className="h-full">
-                {giftWrapEvent ? (
-                  <pre className="text-xs bg-muted p-4 rounded-md overflow-x-auto">
-                    <code>{JSON.stringify(giftWrapEvent, null, 2)}</code>
-                  </pre>
-                ) : (
-                  <div className="p-4 text-muted-foreground text-sm">
-                    Gift wrap not available for this message
-                  </div>
-                )}
-              </ScrollArea>
-            </TabsContent>
-            <TabsContent value="seal" className="flex-1 mt-4">
-              <ScrollArea className="h-full">
-                <pre className="text-xs bg-muted p-4 rounded-md overflow-x-auto">
-                  <code>{JSON.stringify(outerEvent, null, 2)}</code>
+            <TabsContent value="giftwrap" className="flex-1 mt-4 overflow-auto">
+              {giftWrapEvent ? (
+                <pre className="text-xs bg-muted p-4 rounded-md">
+                  <code>{JSON.stringify(giftWrapEvent, null, 2)}</code>
                 </pre>
-              </ScrollArea>
+              ) : (
+                <div className="p-4 text-muted-foreground text-sm">
+                  Gift wrap not available for this message
+                </div>
+              )}
             </TabsContent>
-            <TabsContent value="inner" className="flex-1 mt-4">
-              <ScrollArea className="h-full">
-                <pre className="text-xs bg-muted p-4 rounded-md overflow-x-auto">
-                  <code>{JSON.stringify(innerEvent, null, 2)}</code>
-                </pre>
-              </ScrollArea>
+            <TabsContent value="seal" className="flex-1 mt-4 overflow-auto">
+              <pre className="text-xs bg-muted p-4 rounded-md">
+                <code>{JSON.stringify(outerEvent, null, 2)}</code>
+              </pre>
+            </TabsContent>
+            <TabsContent value="inner" className="flex-1 mt-4 overflow-auto">
+              <pre className="text-xs bg-muted p-4 rounded-md">
+                <code>{JSON.stringify(innerEvent, null, 2)}</code>
+              </pre>
             </TabsContent>
           </Tabs>
         ) : (
-          <ScrollArea className="flex-1">
-            <pre className="text-xs bg-muted p-4 rounded-md overflow-x-auto">
+          <div className="flex-1 overflow-auto">
+            <pre className="text-xs bg-muted p-4 rounded-md">
               <code>{JSON.stringify(outerEvent, null, 2)}</code>
             </pre>
-          </ScrollArea>
+          </div>
         )}
       </DialogContent>
     </Dialog>
