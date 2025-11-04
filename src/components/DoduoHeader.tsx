@@ -115,7 +115,7 @@ function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
         if (!isOpen) setMobileCategory(null);
       }}
     >
-      <DialogContent className="max-w-[95vw] w-full sm:max-w-2xl md:max-w-[700px] p-0 max-h-[90vh] flex flex-col [&>button]:hidden md:[&>button]:block">
+      <DialogContent className="max-w-[95vw] w-full sm:max-w-2xl md:max-w-[700px] p-0 max-h-[90vh] flex flex-col [&>button]:hidden md:[&>button]:block" aria-describedby={undefined}>
         {/* Mobile: Single-line header with arrow, title, and close */}
         <DialogHeader className="md:hidden flex flex-row items-center justify-between px-4 sm:px-6 pt-4 sm:pt-6">
           {mobileCategory ? (
