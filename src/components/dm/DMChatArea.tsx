@@ -65,11 +65,11 @@ const RawEventModal = ({
             <TabsContent value="giftwrap" className="flex-1 mt-4">
               <ScrollArea className="h-full">
                 {giftWrapEvent ? (
-                  <pre className="text-xs bg-muted p-4 rounded-md overflow-x-auto mx-6">
+                  <pre className="text-xs bg-muted p-4 rounded-md overflow-x-auto">
                     <code>{JSON.stringify(giftWrapEvent, null, 2)}</code>
                   </pre>
                 ) : (
-                  <div className="p-4 text-muted-foreground text-sm mx-6">
+                  <div className="p-4 text-muted-foreground text-sm">
                     Gift wrap not available for this message
                   </div>
                 )}
@@ -77,14 +77,14 @@ const RawEventModal = ({
             </TabsContent>
             <TabsContent value="seal" className="flex-1 mt-4">
               <ScrollArea className="h-full">
-                <pre className="text-xs bg-muted p-4 rounded-md overflow-x-auto mx-6">
+                <pre className="text-xs bg-muted p-4 rounded-md overflow-x-auto">
                   <code>{JSON.stringify(outerEvent, null, 2)}</code>
                 </pre>
               </ScrollArea>
             </TabsContent>
             <TabsContent value="inner" className="flex-1 mt-4">
               <ScrollArea className="h-full">
-                <pre className="text-xs bg-muted p-4 rounded-md overflow-x-auto mx-6">
+                <pre className="text-xs bg-muted p-4 rounded-md overflow-x-auto">
                   <code>{JSON.stringify(innerEvent, null, 2)}</code>
                 </pre>
               </ScrollArea>
