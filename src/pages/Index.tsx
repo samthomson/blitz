@@ -1,5 +1,4 @@
 import { useSeoMeta } from '@unhead/react';
-import { useState } from 'react';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { DMMessagingInterface } from '@/components/dm/DMMessagingInterface';
 import { DoduoHeader } from '@/components/DoduoHeader';
@@ -8,21 +7,10 @@ import { Button } from '@/components/ui/button';
 import { MessageSquare, Shield, Lock, Zap } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
 import { Moon, Sun } from 'lucide-react';
-import { useDMContext } from '@/contexts/DMContext';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import { DMStatusInfo } from '@/components/dm/DMStatusInfo';
 
 const Index = () => {
   const { user } = useCurrentUser();
   const { theme, setTheme } = useTheme();
-  const [statusModalOpen, setStatusModalOpen] = useState(false);
-  const { clearCacheAndRefetch } = useDMContext();
 
   useSeoMeta({
     title: 'Doduo - Private Messaging on Nostr',
@@ -31,27 +19,12 @@ const Index = () => {
 
   if (user) {
     return (
-      <>
-        {/* Status Modal */}
-        <Dialog open={statusModalOpen} onOpenChange={setStatusModalOpen}>
-          <DialogContent className="max-w-md">
-            <DialogHeader>
-              <DialogTitle>Messaging Status</DialogTitle>
-              <DialogDescription>
-                View loading status, cache info, and connection details
-              </DialogDescription>
-            </DialogHeader>
-            <DMStatusInfo clearCacheAndRefetch={clearCacheAndRefetch} />
-          </DialogContent>
-        </Dialog>
-
-        <div className="h-screen flex flex-col bg-background">
-          <DoduoHeader onStatusClick={() => setStatusModalOpen(true)} />
-          <div className="flex-1 overflow-hidden">
-            <DMMessagingInterface />
-          </div>
+      <div className="h-screen flex flex-col bg-background">
+        <DoduoHeader />
+        <div className="flex-1 overflow-hidden">
+          <DMMessagingInterface />
         </div>
-      </>
+      </div>
     );
   }
 

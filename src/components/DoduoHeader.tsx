@@ -1,9 +1,11 @@
-import { MessageSquare, Moon, Sun, Settings, Info, Palette, Database, ChevronRight, ArrowLeft, X } from 'lucide-react';
+import { MessageSquare, Moon, Sun, Settings, Palette, Database, ChevronRight, ArrowLeft, X } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { useTheme } from '@/hooks/useTheme';
 import { LoginArea } from '@/components/auth/LoginArea';
 import { HelpDialog } from '@/components/HelpDialog';
+import { DMStatusInfo } from '@/components/dm/DMStatusInfo';
+import { useDMContext } from '@/contexts/DMContext';
 import {
   Dialog,
   DialogContent,
@@ -13,19 +15,15 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
 
-interface DoduoHeaderProps {
-  onStatusClick?: () => void;
-}
-
 interface SettingsModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onStatusClick?: () => void;
 }
 
-function SettingsModal({ open, onOpenChange, onStatusClick }: SettingsModalProps) {
+function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
   const { theme, setTheme } = useTheme();
   const [mobileCategory, setMobileCategory] = useState<string | null>(null);
+  const { clearCacheAndRefetch } = useDMContext();
 
   return (
     <Dialog 
@@ -140,23 +138,7 @@ function SettingsModal({ open, onOpenChange, onStatusClick }: SettingsModalProps
             <div className="px-4 py-4 space-y-4">
               <div>
                 <h3 className="text-sm font-semibold mb-3">Data & Cache</h3>
-                {onStatusClick && (
-                  <Button
-                    variant="outline"
-                    className="w-full justify-start h-auto py-3 px-4"
-                    onClick={() => {
-                      onOpenChange(false);
-                      setMobileCategory(null);
-                      onStatusClick();
-                    }}
-                  >
-                    <Info className="mr-3 h-5 w-5" />
-                    <div className="flex flex-col items-start">
-                      <span className="font-medium">Status & Info</span>
-                      <span className="text-xs text-muted-foreground">View messaging status and cache</span>
-                    </div>
-                  </Button>
-                )}
+                <DMStatusInfo clearCacheAndRefetch={clearCacheAndRefetch} />
               </div>
             </div>
           ) : null}
@@ -218,22 +200,7 @@ function SettingsModal({ open, onOpenChange, onStatusClick }: SettingsModalProps
             <TabsContent value="storage" className="mt-0 space-y-4">
               <div>
                 <h3 className="text-sm font-semibold mb-3">Data & Cache</h3>
-                {onStatusClick && (
-                  <Button
-                    variant="outline"
-                    className="w-full justify-start h-auto py-3 px-4"
-                    onClick={() => {
-                      onOpenChange(false);
-                      onStatusClick();
-                    }}
-                  >
-                    <Info className="mr-3 h-5 w-5" />
-                    <div className="flex flex-col items-start">
-                      <span className="font-medium">Status & Info</span>
-                      <span className="text-xs text-muted-foreground">View messaging status and cache</span>
-                    </div>
-                  </Button>
-                )}
+                <DMStatusInfo clearCacheAndRefetch={clearCacheAndRefetch} />
               </div>
             </TabsContent>
           </div>
@@ -243,7 +210,7 @@ function SettingsModal({ open, onOpenChange, onStatusClick }: SettingsModalProps
   );
 }
 
-export function DoduoHeader({ onStatusClick }: DoduoHeaderProps) {
+export function DoduoHeader() {
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   return (
@@ -284,7 +251,6 @@ export function DoduoHeader({ onStatusClick }: DoduoHeaderProps) {
       <SettingsModal 
         open={settingsOpen} 
         onOpenChange={setSettingsOpen}
-        onStatusClick={onStatusClick}
       />
     </>
   );
