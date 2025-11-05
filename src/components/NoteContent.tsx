@@ -38,18 +38,39 @@ export function NoteContent({
       }
       
       if (url) {
-        // Handle URLs
-        parts.push(
-          <a 
-            key={`url-${keyCounter++}`}
-            href={url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-blue-500 hover:underline"
-          >
-            {url}
-          </a>
-        );
+        // Check if URL is an image
+        const isImage = /\.(jpg|jpeg|png|gif|webp|bmp|svg)(\?.*)?$/i.test(url);
+        
+        if (isImage) {
+          parts.push(
+            <a 
+              key={`img-${keyCounter++}`}
+              href={url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="block my-2"
+            >
+              <img 
+                src={url}
+                alt="Attached image"
+                className="max-w-full rounded-md"
+                style={{ maxHeight: '400px' }}
+              />
+            </a>
+          );
+        } else {
+          parts.push(
+            <a 
+              key={`url-${keyCounter++}`}
+              href={url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-500 hover:underline"
+            >
+              {url}
+            </a>
+          );
+        }
       } else if (nostrPrefix && nostrData) {
         // Handle Nostr references
         try {
