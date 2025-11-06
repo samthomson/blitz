@@ -7,7 +7,6 @@ import { genUserName } from '@/lib/genUserName';
 import { formatConversationTime, formatFullDateTime, parseConversationId, getPubkeyColor } from '@/lib/dmUtils';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -265,7 +264,7 @@ export const DMConversationList = ({
   const isInitialLoad = (loadingPhase === LOADING_PHASES.CACHE || loadingPhase === LOADING_PHASES.RELAYS) && conversations.length === 0;
 
   return (
-    <Card className={cn("h-full flex flex-col overflow-hidden", className)}>
+    <div className={cn("h-full flex flex-col overflow-hidden border-r border-border bg-card", className)}>
       {/* Header - always visible */}
       <div className="p-4 border-b flex-shrink-0">
         <div className="flex items-center justify-between">
@@ -373,6 +372,6 @@ export const DMConversationList = ({
           </ScrollArea>
         )}
       </div>
-    </Card>
+    </div>
   );
 };

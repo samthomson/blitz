@@ -8,7 +8,6 @@ import { MESSAGE_PROTOCOL, PROTOCOL_MODE, type MessageProtocol } from '@/lib/dmC
 import { formatConversationTime, formatFullDateTime, parseConversationId, getPubkeyColor } from '@/lib/dmUtils';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -551,24 +550,24 @@ export const DMChatArea = ({ conversationId, onBack, className }: DMChatAreaProp
 
   if (!conversationId) {
     return (
-      <Card className={cn("h-full", className)}>
+      <div className={cn("h-full bg-background", className)}>
         <EmptyState isLoading={isLoading} />
-      </Card>
+      </div>
     );
   }
 
   if (!user) {
     return (
-      <Card className={cn("h-full flex items-center justify-center", className)}>
+      <div className={cn("h-full flex items-center justify-center bg-background", className)}>
         <div className="text-center text-muted-foreground">
           <p className="text-sm">Please log in to view messages</p>
         </div>
-      </Card>
+      </div>
     );
   }
 
   return (
-    <Card className={cn("h-full flex flex-col", className)}>
+    <div className={cn("h-full flex flex-col bg-background", className)}>
       <ChatHeader conversationId={conversationId} onBack={onBack} />
 
       <ScrollArea ref={scrollAreaRef} className="flex-1 p-4">
@@ -657,6 +656,6 @@ export const DMChatArea = ({ conversationId, onBack, className }: DMChatAreaProp
           </div>
         </div>
       </div>
-    </Card>
+    </div>
   );
 };
