@@ -21,10 +21,10 @@ export function AppSidebar() {
 
   return (
     <>
-      <div className="w-16 bg-sidebar border-r border-sidebar-border flex flex-col items-center py-4 gap-4 flex-shrink-0">
+      <div className="w-16 bg-sidebar border-r border-sidebar-border flex flex-col items-center pt-4 pb-4 gap-4 flex-shrink-0">
         {/* App Icon - Top */}
-        <div className="flex items-center justify-center w-11 h-11 rounded-xl bg-muted hover:bg-accent transition-colors cursor-pointer">
-          <MessageSquare className="w-6 h-6 text-foreground" strokeWidth={2} />
+        <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-muted hover:bg-accent transition-colors cursor-pointer">
+          <MessageSquare className="w-5 h-5 text-foreground" strokeWidth={2} />
         </div>
 
         {/* Spacer to push other items to bottom */}

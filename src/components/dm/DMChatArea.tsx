@@ -491,7 +491,7 @@ const ChatHeader = ({ conversationId, onBack }: { conversationId: string; onBack
       : metadata?.nip05;
 
   return (
-    <div className="px-4 py-3 border-b flex items-center gap-3">
+    <div className="px-4 py-4 border-b flex items-center gap-3">
       {onBack && (
         <Button
           variant="ghost"
