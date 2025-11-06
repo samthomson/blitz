@@ -26,10 +26,10 @@ export const DMMessagingInterface = ({ className, onStatusClick }: DMMessagingIn
   }, []);
 
   return (
-    <div className={cn("flex gap-4 overflow-hidden h-full", className)}>
+    <div className={cn("flex overflow-hidden h-full", className)}>
       {/* Conversation List - Left Sidebar */}
       <div className={cn(
-        "md:w-80 md:flex-shrink-0",
+        "md:w-[360px] md:flex-shrink-0",
         isMobile && !showConversationList && "hidden",
         isMobile && showConversationList && "w-full"
       )}>

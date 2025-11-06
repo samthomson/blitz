@@ -267,9 +267,31 @@ export const DMConversationList = ({
   return (
     <Card className={cn("h-full flex flex-col overflow-hidden", className)}>
       {/* Header - always visible */}
-      <div className="p-4 border-b flex-shrink-0 flex items-center justify-between">
+      <div className="p-4 border-b flex-shrink-0">
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <h1 className="text-xl font-bold bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
+              Doduo
+            </h1>
+            <p className="text-xs text-muted-foreground">Private messaging</p>
+          </div>
+          <div className="flex items-center gap-1">
+            <NewConversationDialog onStartConversation={onSelectConversation} />
+            {onStatusClick && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                onClick={onStatusClick}
+                aria-label="View messaging status"
+              >
+                <Info className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
+        </div>
         <div className="flex items-center gap-2">
-          <h2 className="font-semibold text-lg">Messages</h2>
+          <h2 className="font-semibold text-sm text-muted-foreground">Messages</h2>
           {(loadingPhase === LOADING_PHASES.CACHE ||
             loadingPhase === LOADING_PHASES.RELAYS ||
             loadingPhase === LOADING_PHASES.SUBSCRIPTIONS) && (
@@ -289,20 +311,6 @@ export const DMConversationList = ({
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
-          )}
-        </div>
-        <div className="flex items-center gap-1">
-          <NewConversationDialog onStartConversation={onSelectConversation} />
-          {onStatusClick && (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8"
-              onClick={onStatusClick}
-              aria-label="View messaging status"
-            >
-              <Info className="h-4 w-4" />
-            </Button>
           )}
         </div>
       </div>

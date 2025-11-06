@@ -1,7 +1,7 @@
 import { useSeoMeta } from '@unhead/react';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { DMMessagingInterface } from '@/components/dm/DMMessagingInterface';
-import { DoduoHeader } from '@/components/DoduoHeader';
+import { AppSidebar } from '@/components/AppSidebar';
 import { LoginArea } from '@/components/auth/LoginArea';
 import { Button } from '@/components/ui/button';
 import { MessageSquare, Shield, Lock, Zap } from 'lucide-react';
@@ -19,8 +19,8 @@ const Index = () => {
 
   if (user) {
     return (
-      <div className="h-screen flex flex-col bg-background">
-        <DoduoHeader />
+      <div className="h-screen flex bg-background">
+        <AppSidebar />
         <div className="flex-1 overflow-hidden">
           <DMMessagingInterface />
         </div>
