@@ -312,29 +312,35 @@ export const DMConversationList = ({
       </div>
 
       {/* Tab buttons - always visible */}
-      <div className="px-2 pt-2 flex-shrink-0">
-        <div className="grid grid-cols-2 gap-1 bg-muted p-1 rounded-lg">
+      <div className="px-4 flex-shrink-0 border-b border-border">
+        <div className="flex gap-6">
           <button
             onClick={() => setActiveTab('known')}
             className={cn(
-              "text-xs py-2 px-3 rounded-md transition-colors",
+              "text-sm py-3 font-medium transition-colors relative",
               activeTab === 'known'
-                ? "bg-background shadow-sm font-medium"
+                ? "text-foreground"
                 : "text-muted-foreground hover:text-foreground"
             )}
           >
             Active {knownConversations.length > 0 && `(${knownConversations.length})`}
+            {activeTab === 'known' && (
+              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
+            )}
           </button>
           <button
             onClick={() => setActiveTab('requests')}
             className={cn(
-              "text-xs py-2 px-3 rounded-md transition-colors",
+              "text-sm py-3 font-medium transition-colors relative",
               activeTab === 'requests'
-                ? "bg-background shadow-sm font-medium"
+                ? "text-foreground"
                 : "text-muted-foreground hover:text-foreground"
             )}
           >
             Requests {requestConversations.length > 0 && `(${requestConversations.length})`}
+            {activeTab === 'requests' && (
+              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
+            )}
           </button>
         </div>
       </div>
