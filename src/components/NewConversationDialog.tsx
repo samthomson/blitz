@@ -24,6 +24,7 @@ interface NewConversationDialogProps {
   onStartConversation: (pubkey: string) => void;
 }
 
+const EMPTY_AUTHORS_MAP = new Map();
 
 export function NewConversationDialog({ onStartConversation }: NewConversationDialogProps) {
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -61,7 +62,7 @@ export function NewConversationDialog({ onStartConversation }: NewConversationDi
 
   // Batch-fetch metadata in chunks (works efficiently for any list size)
   // Returns immediately so UI can render, metadata fills in progressively
-  const { data: authorsMap = new Map(), isFetching: isFetchingMetadata } = useAuthorsBatch(pubkeysToFetch);
+  const { data: authorsMap = EMPTY_AUTHORS_MAP, isFetching: isFetchingMetadata } = useAuthorsBatch(pubkeysToFetch);
   
   // Show loading only for initial follows fetch, not metadata (UI renders immediately)
   const isLoading = isLoadingFollows;
