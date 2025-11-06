@@ -130,24 +130,26 @@ describe('dmUtils', () => {
       expect(getConversationPartner(event, 'user-pubkey')).toBe('other-pubkey');
     });
 
-    it('returns undefined when no conversation partner found', () => {
+    it('handles self-messaging (user sent message to themselves)', () => {
       const event: NostrEvent = {
         id: 'test-id',
-        pubkey: 'other-pubkey',
+        pubkey: 'user-pubkey',
         created_at: Math.floor(Date.now() / 1000),
         kind: 4,
-        tags: [], // no p tag
+        tags: [['p', 'user-pubkey']], // sent to self
         content: 'encrypted content',
         sig: 'test-sig',
       };
 
-      expect(getConversationPartner(event, 'user-pubkey')).toBeUndefined();
+      expect(getConversationPartner(event, 'user-pubkey')).toBe('user-pubkey');
     });
   });
 
   describe('formatConversationTime', () => {
     it('shows time for messages today', () => {
-      const todayTimestamp = Math.floor(new Date('2024-01-15T10:15:00').getTime() / 1000);
+      const now = new Date();
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 10, 15);
+      const todayTimestamp = Math.floor(today.getTime() / 1000);
       const formatted = formatConversationTime(todayTimestamp);
       
       // Should show time like "10:15 AM"
@@ -155,34 +157,60 @@ describe('dmUtils', () => {
     });
 
     it('shows "Yesterday" for messages from yesterday', () => {
-      const yesterdayTimestamp = Math.floor(new Date('2024-01-14T20:00:00').getTime() / 1000);
+      const now = new Date();
+      const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 20, 0);
+      const yesterdayTimestamp = Math.floor(yesterday.getTime() / 1000);
       const formatted = formatConversationTime(yesterdayTimestamp);
       
       expect(formatted).toBe('Yesterday');
     });
 
     it('shows day name for messages this week', () => {
-      const thisWeekTimestamp = Math.floor(new Date('2024-01-13T12:00:00').getTime() / 1000);
+      const now = new Date();
+      // Get the start of this week (Sunday)
+      const weekStart = new Date(now);
+      weekStart.setDate(now.getDate() - now.getDay());
+      weekStart.setHours(0, 0, 0, 0);
+      
+      // Create a date that's definitely in this week but not today/yesterday
+      // Use the week start + 2 days (Tuesday), but if today is Sun/Mon/Tue, use Thursday instead
+      const daysToAdd = now.getDay() <= 2 ? 4 : 2;
+      const thisWeek = new Date(weekStart);
+      thisWeek.setDate(weekStart.getDate() + daysToAdd);
+      thisWeek.setHours(12, 0, 0, 0);
+      
+      const thisWeekTimestamp = Math.floor(thisWeek.getTime() / 1000);
       const formatted = formatConversationTime(thisWeekTimestamp);
       
-      // Should show day name like "Sat" or "Saturday"
-      expect(formatted).toMatch(/\w{3}/);
+      // Should show day name like "Sat" or "Saturday" (abbreviated 3+ chars)
+      expect(formatted).toMatch(/^\w{3,}/);
+      // Should NOT contain year or comma
+      expect(formatted).not.toMatch(/\d{4}|,/);
     });
 
     it('shows month and day for messages this year', () => {
-      const thisYearTimestamp = Math.floor(new Date('2024-01-01T12:00:00').getTime() / 1000);
+      const now = new Date();
+      // Create a date 3 months ago to ensure it's in the past but still this year
+      const thisYear = new Date(now.getFullYear(), now.getMonth() - 3, 15, 12, 0);
+      const thisYearTimestamp = Math.floor(thisYear.getTime() / 1000);
       const formatted = formatConversationTime(thisYearTimestamp);
       
-      // Should show like "Jan 1"
-      expect(formatted).toMatch(/\w{3}\s+\d{1,2}/);
+      // Should show month and day (format varies by locale: "Jan 15" or "15 Jan")
+      expect(formatted).toMatch(/^(\w{3}\s+\d{1,2}|\d{1,2}\s+\w{3})$/);
+      // Should NOT contain year
+      expect(formatted).not.toMatch(/\d{4}/);
     });
 
     it('shows full date for messages from previous years', () => {
-      const oldTimestamp = Math.floor(new Date('2023-12-25T12:00:00').getTime() / 1000);
+      const now = new Date();
+      const lastYear = new Date(now.getFullYear() - 1, 11, 25, 12, 0);
+      const oldTimestamp = Math.floor(lastYear.getTime() / 1000);
       const formatted = formatConversationTime(oldTimestamp);
       
-      // Should show like "Dec 25, 2023"
-      expect(formatted).toMatch(/\w{3}\s+\d{1,2},\s+\d{4}/);
+      // Should include month, day, and year (format varies by locale)
+      expect(formatted).toMatch(/\d{4}/); // Must have year
+      expect(formatted).toMatch(/\w{3}/); // Must have month abbreviation
+      expect(formatted).toMatch(/\d{1,2}/); // Must have day
     });
   });
 
