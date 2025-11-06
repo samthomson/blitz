@@ -21,7 +21,7 @@ export function AppSidebar() {
 
   return (
     <>
-      <div className="w-16 bg-card border-r border-border flex flex-col items-center py-4 gap-4 flex-shrink-0">
+      <div className="w-16 bg-sidebar border-r border-sidebar-border flex flex-col items-center py-4 gap-4 flex-shrink-0">
         {/* App Icon - Top */}
         <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-primary/80 shadow-lg shadow-primary/20">
           <MessageSquare className="w-5 h-5 text-primary-foreground" strokeWidth={2.5} />
