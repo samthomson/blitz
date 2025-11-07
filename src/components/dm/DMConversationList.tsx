@@ -13,6 +13,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { cn } from '@/lib/utils';
 import { LOADING_PHASES } from '@/lib/dmConstants';
 import { NewConversationDialog } from '@/components/NewConversationDialog';
+import { APP_NAME, APP_DESCRIPTION } from '@/lib/constants';
 
 interface DMConversationListProps {
   selectedPubkey: string | null;
@@ -270,9 +271,9 @@ export const DMConversationList = ({
         <div className="flex items-center justify-between">
           <div className="flex flex-col justify-center min-h-[32px]">
             <h1 className="text-lg font-bold bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent leading-none">
-              Doduo
+              {APP_NAME}
             </h1>
-            <p className="text-[10px] text-muted-foreground leading-tight mt-0.5">Private messaging</p>
+            <p className="text-[10px] text-muted-foreground leading-tight mt-0.5">{APP_DESCRIPTION}</p>
           </div>
           <div className="flex items-center gap-1">
             <NewConversationDialog onStartConversation={onSelectConversation} />
