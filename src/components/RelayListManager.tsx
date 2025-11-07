@@ -243,45 +243,59 @@ export function RelayListManager() {
                   {currentRelays.map((relay) => (
                     <div
                       key={relay.url}
-                      className="flex items-center gap-3 p-3 border rounded-lg"
+                      className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 p-3 border rounded-lg"
                     >
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-mono truncate">{relay.url}</p>
+                      <div className="flex items-center justify-between gap-3 sm:flex-1 sm:min-w-0">
+                        <p className="text-sm font-mono truncate flex-1 my-auto">{relay.url}</p>
+                        
+                        {/* Mobile: Trash icon on same line as URL */}
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-destructive sm:hidden flex-shrink-0"
+                          onClick={() => handleRemoveRelay(relay.url)}
+                          disabled={isPublishingNIP65}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
                       </div>
                       
-                      <div className="flex items-center gap-4">
-                        <div className="flex items-center gap-2">
-                          <Label htmlFor={`read-${relay.url}`} className="text-xs cursor-pointer">
-                            Read
-                          </Label>
+                      <div className="flex items-center gap-3 sm:gap-3">
+                        <div className="flex items-center gap-1.5">
                           <Switch
                             id={`read-${relay.url}`}
                             checked={relay.read}
                             onCheckedChange={() => handleToggleRead(relay.url)}
                             disabled={isPublishingNIP65}
+                            className="scale-75"
                           />
+                          <Label htmlFor={`read-${relay.url}`} className="text-xs cursor-pointer">
+                            Read
+                          </Label>
                         </div>
                         
-                        <div className="flex items-center gap-2">
-                          <Label htmlFor={`write-${relay.url}`} className="text-xs cursor-pointer">
-                            Write
-                          </Label>
+                        <div className="flex items-center gap-1.5">
                           <Switch
                             id={`write-${relay.url}`}
                             checked={relay.write}
                             onCheckedChange={() => handleToggleWrite(relay.url)}
                             disabled={isPublishingNIP65}
+                            className="scale-75"
                           />
+                          <Label htmlFor={`write-${relay.url}`} className="text-xs cursor-pointer">
+                            Write
+                          </Label>
                         </div>
 
+                        {/* Desktop: Trash icon after toggles */}
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="h-8 w-8 text-destructive"
+                          className="hidden sm:flex h-7 w-7 text-destructive flex-shrink-0 self-center"
                           onClick={() => handleRemoveRelay(relay.url)}
                           disabled={isPublishingNIP65}
                         >
-                          <Trash2 className="h-4 w-4" />
+                          <Trash2 className="h-3.5 w-3.5" />
                         </Button>
                       </div>
                     </div>
