@@ -52,7 +52,7 @@ export function useRelayListForPubkey(pubkey: string | undefined) {
       return relays;
     },
     enabled: !!pubkey,
-    staleTime: 5 * 60 * 1000,
+    staleTime: 30 * 60 * 1000, // 30 minutes - relay lists change rarely
   });
 }
 
