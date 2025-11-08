@@ -8,6 +8,7 @@ import { useToast } from '@/hooks/useToast';
 import { useRelayList } from '@/hooks/useRelayList';
 import { validateDMEvent, createConversationId, parseConversationId } from '@/lib/dmUtils';
 import { LOADING_PHASES, type LoadingPhase, PROTOCOL_MODE, type ProtocolMode } from '@/lib/dmConstants';
+import { fetchRelayListsBulk } from '@/lib/relayUtils';
 import { NSecSigner, type NostrEvent } from '@nostrify/nostrify';
 import { generateSecretKey } from 'nostr-tools';
 import type { MessageProtocol } from '@/lib/dmConstants';
@@ -1766,49 +1767,15 @@ export function DMProvider({ children, config }: DMProviderProps) {
 
       if (uniquePubkeys.length === 0) return;
 
-      const relayGroup = nostr.group(appConfig.discoveryRelays);
-      
-      // Fetch all in parallel (let them fail silently, just for cache warming)
-      await Promise.allSettled(
-        uniquePubkeys.map(async (pubkey) => {
-          try {
-            const events = await relayGroup.query(
-              [{ kinds: [10002], authors: [pubkey], limit: 1 }],
-              { signal: AbortSignal.timeout(3000) }
-            );
-            
-            if (events.length === 0) return;
+      // Bulk fetch all relay lists in ONE query (much more efficient)
+      const relayLists = await fetchRelayListsBulk(nostr, appConfig.discoveryRelays, uniquePubkeys);
 
-            // Parse relay list and cache it in queryClient
-            const event = events[0];
-            const relays: { url: string; read: boolean; write: boolean }[] = [];
+      // Cache each result in React Query
+      relayLists.forEach((relays, pubkey) => {
+        queryClient.setQueryData(['nostr', 'relay-list', pubkey], relays);
+      });
 
-            for (const tag of event.tags) {
-              if (tag[0] !== 'r') continue;
-              const url = tag[1];
-              const marker = tag[2];
-              if (!url) continue;
-
-              switch (marker) {
-                case 'read':
-                  relays.push({ url, read: true, write: false });
-                  break;
-                case 'write':
-                  relays.push({ url, read: false, write: true });
-                  break;
-                default:
-                  relays.push({ url, read: true, write: true });
-              }
-            }
-
-            // Cache in React Query using the same key as useRelayListForPubkey
-            queryClient.setQueryData(['nostr', 'relay-list', pubkey], relays);
-          } catch (error) {
-            // Silent fail - this is just cache warming
-            console.debug('[DM] Failed to pre-fetch relay list for', pubkey, error);
-          }
-        })
-      );
+      console.debug(`[DM] Pre-fetched ${relayLists.size}/${uniquePubkeys.length} relay lists`);
     };
 
     fetchRelayLists();
