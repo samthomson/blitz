@@ -269,11 +269,33 @@ export const DMConversationList = ({
       {/* Header - always visible */}
       <div className="px-4 py-4 border-b flex-shrink-0">
         <div className="flex items-center justify-between">
-          <div className="flex flex-col justify-center min-h-[32px]">
-            <h1 className="text-lg font-bold bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent leading-none">
-              {APP_NAME}
-            </h1>
-            <p className="text-[10px] text-muted-foreground leading-tight mt-0.5">{APP_DESCRIPTION}</p>
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="flex flex-col justify-center min-h-[32px]">
+              <h1 className="text-lg font-bold bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent leading-none">
+                {APP_NAME}
+              </h1>
+              <p className="text-[10px] text-muted-foreground leading-tight mt-0.5">{APP_DESCRIPTION}</p>
+            </div>
+            {(loadingPhase === LOADING_PHASES.CACHE ||
+              loadingPhase === LOADING_PHASES.RELAYS ||
+              loadingPhase === LOADING_PHASES.SUBSCRIPTIONS) && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="flex items-center pt-1">
+                      <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p className="text-xs">
+                      {loadingPhase === LOADING_PHASES.CACHE && 'Loading from cache...'}
+                      {loadingPhase === LOADING_PHASES.RELAYS && 'Querying relays for new messages...'}
+                      {loadingPhase === LOADING_PHASES.SUBSCRIPTIONS && 'Setting up subscriptions...'}
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
           </div>
           <div className="flex items-center gap-1">
             <NewConversationDialog onStartConversation={onSelectConversation} />
@@ -290,26 +312,6 @@ export const DMConversationList = ({
             )}
           </div>
         </div>
-        {(loadingPhase === LOADING_PHASES.CACHE ||
-          loadingPhase === LOADING_PHASES.RELAYS ||
-          loadingPhase === LOADING_PHASES.SUBSCRIPTIONS) && (
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <div className="flex items-center">
-                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                </div>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p className="text-xs">
-                  {loadingPhase === LOADING_PHASES.CACHE && 'Loading from cache...'}
-                  {loadingPhase === LOADING_PHASES.RELAYS && 'Querying relays for new messages...'}
-                  {loadingPhase === LOADING_PHASES.SUBSCRIPTIONS && 'Setting up subscriptions...'}
-                </p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        )}
       </div>
 
       {/* Tab buttons - always visible */}
