@@ -43,9 +43,8 @@ const NostrProvider: React.FC<NostrProviderProps> = (props) => {
         return map;
       },
       eventRouter(event: NostrEvent) {
-        // Publish to all discovery relays by default
         // Special case: when publishing kind 10002 (NIP-65), also publish to
-        // the relays specified in the event itself for bootstrapping
+        // the write relays specified in the event itself for bootstrapping
         if (event.kind === 10002) {
           const writeRelays = new Set(discoveryRelays.current);
           
@@ -64,8 +63,23 @@ const NostrProvider: React.FC<NostrProviderProps> = (props) => {
           return Array.from(writeRelays);
         }
         
+        // Special case: when publishing kind 10050 (DM inbox relays), also publish to
+        // the relays specified in the event itself for bootstrapping
+        if (event.kind === 10050) {
+          const dmRelays = new Set(discoveryRelays.current);
+          
+          // Add DM inbox relays from the event tags
+          for (const tag of event.tags) {
+            if (tag[0] === 'relay') {
+              const url = tag[1];
+              if (url) dmRelays.add(url);
+            }
+          }
+          
+          return Array.from(dmRelays);
+        }
+        
         // For all other events, publish to discovery relays
-        // TODO: Use user's NIP-65 write relays when available
         return discoveryRelays.current;
       },
     });
