@@ -399,17 +399,29 @@ export function DMProvider({ children, config }: DMProviderProps) {
 
   const userPubkey = useMemo(() => user?.pubkey, [user?.pubkey]);
 
-  // Get user's NIP-65 relay list
-  const { data: userRelayListData } = useRelayList();
+  // Get user's relay lists (both 10002 and 10050 in one query)
+  const { data: relayLists } = useRelayList();
   
-  // Extract user's read relays (inbox) with fallback to discovery relays
+  // Extract user's inbox relays with priority fallback: 10050 → 10002 read relays → discovery relays
   const userInboxRelays = useMemo(() => {
-    const readRelays = userRelayListData?.relays?.filter(r => r.read)?.map(r => r.url);
-    return readRelays && readRelays.length > 0 ? readRelays : appConfig.discoveryRelays;
-  }, [userRelayListData, appConfig.discoveryRelays]);
+    // Priority 1: NIP-17 DM inbox relays (kind 10050)
+    if (relayLists?.dmInbox?.relays && relayLists.dmInbox.relays.length > 0) {
+      return relayLists.dmInbox.relays;
+    }
+    
+    // Priority 2: NIP-65 read relays (kind 10002)
+    const readRelays = relayLists?.nip65?.relays?.filter(r => r.read)?.map(r => r.url);
+    if (readRelays && readRelays.length > 0) {
+      return readRelays;
+    }
+    
+    // Priority 3: Discovery relays
+    return appConfig.discoveryRelays;
+  }, [relayLists, appConfig.discoveryRelays]);
 
-  // Track NIP-65 changes by event ID (cleaner than JSON serialization)
-  const previousEventId = useRef<string>();
+  // Track relay list changes by event IDs
+  const previousDMEventId = useRef<string>();
+  const previousNIP65EventId = useRef<string>();
 
   // Determine if NIP-17 is enabled based on protocol mode
   const enableNIP17 = protocolMode !== PROTOCOL_MODE.NIP04_ONLY;
@@ -1684,15 +1696,20 @@ export function DMProvider({ children, config }: DMProviderProps) {
 
   // Detect NIP-65 changes and reload messages (track by event ID)
   useEffect(() => {
-    const currentEventId = userRelayListData?.eventId;
-    const nip65Changed = previousEventId.current !== undefined && previousEventId.current !== currentEventId;
-    previousEventId.current = currentEventId;
+    const currentDMEventId = relayLists?.dmInbox?.eventId;
+    const currentNIP65EventId = relayLists?.nip65?.eventId;
+    
+    const dmRelaysChanged = previousDMEventId.current !== undefined && previousDMEventId.current !== currentDMEventId;
+    const nip65RelaysChanged = previousNIP65EventId.current !== undefined && previousNIP65EventId.current !== currentNIP65EventId;
+    
+    previousDMEventId.current = currentDMEventId;
+    previousNIP65EventId.current = currentNIP65EventId;
 
-    if (nip65Changed && enabled && userPubkey && hasInitialLoadCompleted) {
-      console.log('[DM] NIP-65 relay list changed (new event ID), clearing cache and refetching');
+    if ((dmRelaysChanged || nip65RelaysChanged) && enabled && userPubkey && hasInitialLoadCompleted) {
+      console.log('[DM] Relay list changed (new event ID), clearing cache and refetching');
       clearCacheAndRefetch();
     }
-  }, [enabled, userPubkey, userRelayListData?.eventId, hasInitialLoadCompleted, clearCacheAndRefetch]);
+  }, [enabled, userPubkey, relayLists?.dmInbox?.eventId, relayLists?.nip65?.eventId, hasInitialLoadCompleted, clearCacheAndRefetch]);
 
   // Detect hard refresh shortcut (Ctrl+Shift+R / Cmd+Shift+R) to clear cache
   useEffect(() => {
