@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, Trash2, Radio, Search, AlertTriangle } from 'lucide-react';
+import { Plus, Trash2, Radio, Search, AlertTriangle, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -16,8 +16,8 @@ import { useDMContext } from '@/contexts/DMContext';
 export function RelayListManager() {
   const { user } = useCurrentUser();
   const { config, updateConfig } = useAppContext();
-  const { data: relayListData, isLoading } = useRelayList();
-  const relays = relayListData?.relays;
+  const { data: relayListData, isLoading, refetch: refetchRelayList } = useRelayList();
+  const relays = relayListData?.relays;  
   const { mutate: publishRelays, isPending: isPublishingNIP65 } = usePublishRelayList();
   const { relayError, clearRelayError } = useDMContext();
   
@@ -279,7 +279,19 @@ export function RelayListManager() {
         ) : (
           <>
             <div>
-              <h3 className="text-sm font-semibold mb-3">NIP-65 Relay List</h3>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-semibold">NIP-65 Relay List</h3>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => refetchRelayList()}
+                  disabled={isLoading}
+                  className="h-7 px-2 text-xs"
+                >
+                  <RefreshCw className={`h-3 w-3 mr-1 ${isLoading ? 'animate-spin' : ''}`} />
+                  Resync
+                </Button>
+              </div>
               <p className="text-xs text-muted-foreground mb-4">
                 Your published relay list (kind 10002). Read relays are your inbox for DMs. Write relays are where you publish content.
               </p>

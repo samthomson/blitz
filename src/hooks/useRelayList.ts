@@ -19,13 +19,12 @@ export function useRelayList() {
   const { user } = useCurrentUser();
   const { config } = useAppContext();
 
-  return useQuery({
+  const queryResult = useQuery({
     queryKey: ['nostr', 'relay-list', user?.pubkey],
     queryFn: async (c) => {
       if (!user?.pubkey) return null;
 
-      const signal = AbortSignal.any([c.signal, AbortSignal.timeout(3000)]);
-      
+      const signal = AbortSignal.any([c.signal, AbortSignal.timeout(10000)]);
       const relayGroup = nostr.group(config.discoveryRelays);
       
       const events = await relayGroup.query(
@@ -62,6 +61,10 @@ export function useRelayList() {
     },
     enabled: !!user?.pubkey,
     staleTime: 30 * 60 * 1000, // 30 minutes - relay lists change rarely
+    retry: 2, // Retry failed queries twice
+    refetchOnMount: 'always', // ALWAYS refetch on mount, regardless of staleness
   });
+
+  return queryResult;
 }
 
