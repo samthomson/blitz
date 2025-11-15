@@ -1,5 +1,5 @@
 import { MessageSquare, Moon, Sun, Palette, Database, Code, X, ArrowLeft, ChevronRight, Radio, AlertTriangle } from 'lucide-react';
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { useTheme } from '@/hooks/useTheme';
 import { DMStatusInfo } from '@/components/dm/DMStatusInfo';
@@ -15,7 +15,6 @@ import {
 } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { RelayListManager } from '@/components/RelayListManager';
 
 interface SettingsModalProps {
@@ -139,30 +138,6 @@ function AdvancedContent() {
 export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
   const [mobileCategory, setMobileCategory] = useState<string | null>(null);
   const { relayError } = useDMContext();
-  const [activeTab, setActiveTab] = useState('appearance');
-  const [contentHeight, setContentHeight] = useState<number | undefined>(undefined);
-  const contentRef = useRef<HTMLDivElement>(null);
-
-  const measureHeight = useCallback(() => {
-    if (contentRef.current) {
-      const height = contentRef.current.scrollHeight;
-      setContentHeight(height);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (open && contentHeight === undefined) {
-      const timer = setTimeout(measureHeight, 50);
-      return () => clearTimeout(timer);
-    }
-  }, [open, contentHeight, measureHeight]);
-
-  useEffect(() => {
-    if (contentHeight !== undefined) {
-      const timer = setTimeout(measureHeight, 0);
-      return () => clearTimeout(timer);
-    }
-  }, [activeTab, contentHeight, measureHeight]);
 
   return (
     <Dialog 
@@ -172,7 +147,7 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
         if (!isOpen) setMobileCategory(null);
       }}
     >
-      <DialogContent className="max-w-[95vw] w-full sm:max-w-2xl md:max-w-[700px] p-0 max-h-[90vh] flex flex-col [&>button]:hidden md:[&>button]:block" aria-describedby={undefined}>
+      <DialogContent className="max-w-[95vw] w-full sm:max-w-2xl md:max-w-[700px] h-[90vh] md:h-[85vh] md:min-h-[600px] p-0 flex flex-col [&>button]:hidden md:[&>button]:block" aria-describedby={undefined}>
         {/* Mobile: Single-line header with arrow, title, and close */}
         <DialogHeader className="md:hidden flex flex-row items-center justify-between px-4 sm:px-6 pt-4 sm:pt-6">
           {mobileCategory ? (
@@ -206,7 +181,7 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
         <Separator />
 
         {/* Mobile: Category list or selected category content */}
-        <ScrollArea className="md:hidden flex-1 overflow-auto">
+        <div className="md:hidden flex-1 min-h-0 overflow-auto">
           {!mobileCategory ? (
             <div className="px-4 py-4 space-y-2">
               <Button
@@ -308,12 +283,12 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
               <AdvancedContent />
             </div>
           ) : null}
-        </ScrollArea>
+        </div>
 
         {/* Desktop: Tabbed layout */}
-        <Tabs defaultValue="appearance" onValueChange={setActiveTab} className="hidden md:flex flex-1 min-h-0">
-          <div className="w-48 border-r flex-shrink-0 self-stretch">
-            <TabsList className="flex flex-col w-full h-full bg-transparent border-0 rounded-none px-2 pt-0 pb-4 gap-1 items-start justify-start">
+        <Tabs defaultValue="appearance" className="hidden md:flex flex-1 min-h-0 overflow-hidden">
+          <div className="w-48 border-r flex-shrink-0 flex flex-col">
+            <TabsList className="flex flex-col w-full bg-transparent border-0 rounded-none px-2 pt-4 pb-4 gap-1 items-start justify-start">
               <TabsTrigger 
                 value="appearance" 
                 className="w-full justify-start gap-3 data-[state=active]:bg-accent"
@@ -353,11 +328,8 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
             </TabsList>
           </div>
 
-          <div 
-            className="flex-1 min-w-0 overflow-hidden transition-all duration-700 ease-in-out"
-            style={{ height: contentHeight ? `${contentHeight}px` : 'auto' }}
-          >
-            <div ref={contentRef} className="px-6 pt-0 pb-4 h-full overflow-auto">
+          <div className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden">
+            <div className="px-6 pt-4 pb-4 flex-1 min-h-0 overflow-auto">
               <TabsContent value="appearance" className="mt-0 animate-in fade-in-0 duration-200">
                 <AppearanceContent />
               </TabsContent>

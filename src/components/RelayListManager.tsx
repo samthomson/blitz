@@ -338,16 +338,16 @@ export function RelayListManager() {
       )}
       
       <TabsList className="grid w-full grid-cols-3">
-        <TabsTrigger value="discovery">
-          <Search className="h-4 w-4 mr-2" />
+        <TabsTrigger value="discovery" className="px-2 sm:px-3">
+          <Search className="h-4 w-4 mr-2 hidden sm:inline-block" />
           Discovery
         </TabsTrigger>
-        <TabsTrigger value="nip65">
-          <Radio className="h-4 w-4 mr-2" />
+        <TabsTrigger value="nip65" className="px-2 sm:px-3">
+          <Radio className="h-4 w-4 mr-2 hidden sm:inline-block" />
           Inbox/Outbox
         </TabsTrigger>
-        <TabsTrigger value="dm-inbox">
-          <MessageSquare className="h-4 w-4 mr-2" />
+        <TabsTrigger value="dm-inbox" className="px-2 sm:px-3">
+          <MessageSquare className="h-4 w-4 mr-2 hidden sm:inline-block" />
           DMs
           {relayError && <AlertTriangle className="h-3 w-3 ml-2 text-destructive" />}
         </TabsTrigger>
