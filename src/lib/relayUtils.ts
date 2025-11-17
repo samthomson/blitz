@@ -1,54 +1,85 @@
 import type { NPool } from '@nostrify/nostrify';
-import type { RelayEntry } from '@/hooks/useRelayList';
+import type { RelayEntry, RelayListResult } from '@/hooks/useRelayList';
 
 /**
- * Bulk fetch NIP-65 relay lists for multiple pubkeys
- * Returns a Map of pubkey -> relay list
+ * Bulk fetch relay lists (both 10050 and 10002) for multiple pubkeys
+ * Returns a Map of pubkey -> RelayListResult
+ * Uses priority: 10050 > 10002 > discovery relays
  * More efficient than individual queries
  */
 export async function fetchRelayListsBulk(
   nostr: NPool,
   discoveryRelays: string[],
   pubkeys: string[]
-): Promise<Map<string, RelayEntry[]>> {
+): Promise<Map<string, RelayListResult>> {
   if (pubkeys.length === 0) {
     return new Map();
   }
 
   const relayGroup = nostr.group(discoveryRelays);
-  const results = new Map<string, RelayEntry[]>();
+  const results = new Map<string, RelayListResult>();
 
   try {
-    // Single query for all pubkeys
+    // Single query for all pubkeys, query both 10050 and 10002
     const events = await relayGroup.query(
-      [{ kinds: [10002], authors: pubkeys }],
+      [{ kinds: [10002, 10050], authors: pubkeys, limit: pubkeys.length * 2 }],
       { signal: AbortSignal.timeout(15000) }
     );
 
-    // Parse each event and map to pubkey
+    // Group events by pubkey and kind, keep only latest per pubkey+kind
+    const eventsByPubkeyAndKind = new Map<string, typeof events[0]>();
     for (const event of events) {
-      const relays: RelayEntry[] = [];
+      const key = `${event.pubkey}:${event.kind}`;
+      const existing = eventsByPubkeyAndKind.get(key);
+      if (!existing || event.created_at > existing.created_at) {
+        eventsByPubkeyAndKind.set(key, event);
+      }
+    }
 
-      for (const tag of event.tags) {
-        if (tag[0] !== 'r') continue;
-        const url = tag[1];
-        const marker = tag[2];
-        if (!url) continue;
-
-        switch (marker) {
-          case 'read':
-            relays.push({ url, read: true, write: false });
-            break;
-          case 'write':
-            relays.push({ url, read: false, write: true });
-            break;
-          default:
-            relays.push({ url, read: true, write: true });
+    // Parse events and build RelayListResult for each pubkey
+    for (const pubkey of pubkeys) {
+      const result: RelayListResult = {};
+      
+      // Check for 10050 first (highest priority)
+      const dmEvent = eventsByPubkeyAndKind.get(`${pubkey}:10050`);
+      if (dmEvent) {
+        const relays = dmEvent.tags
+          .filter(tag => tag[0] === 'relay')
+          .map(tag => tag[1])
+          .filter(Boolean);
+        if (relays.length > 0) {
+          result.dmInbox = { relays, eventId: dmEvent.id };
         }
       }
+      
+      // Check for 10002 (fallback)
+      const nip65Event = eventsByPubkeyAndKind.get(`${pubkey}:10002`);
+      if (nip65Event) {
+        const relays: RelayEntry[] = [];
+        for (const tag of nip65Event.tags) {
+          if (tag[0] !== 'r') continue;
+          const url = tag[1];
+          const marker = tag[2];
+          if (!url) continue;
 
-      if (relays.length > 0) {
-        results.set(event.pubkey, relays);
+          switch (marker) {
+            case 'read':
+              relays.push({ url, read: true, write: false });
+              break;
+            case 'write':
+              relays.push({ url, read: false, write: true });
+              break;
+            default:
+              relays.push({ url, read: true, write: true });
+          }
+        }
+        if (relays.length > 0) {
+          result.nip65 = { relays, eventId: nip65Event.id };
+        }
+      }
+      
+      if (Object.keys(result).length > 0) {
+        results.set(pubkey, result);
       }
     }
   } catch (error) {
@@ -67,8 +98,8 @@ export async function fetchRelayListsBatched(
   discoveryRelays: string[],
   pubkeys: string[],
   batchSize = 50
-): Promise<Map<string, RelayEntry[]>> {
-  const results = new Map<string, RelayEntry[]>();
+): Promise<Map<string, RelayListResult>> {
+  const results = new Map<string, RelayListResult>();
 
   // Split into batches
   for (let i = 0; i < pubkeys.length; i += batchSize) {
@@ -76,8 +107,8 @@ export async function fetchRelayListsBatched(
     const batchResults = await fetchRelayListsBulk(nostr, discoveryRelays, batch);
     
     // Merge into results
-    batchResults.forEach((relays, pubkey) => {
-      results.set(pubkey, relays);
+    batchResults.forEach((relayListResult, pubkey) => {
+      results.set(pubkey, relayListResult);
     });
   }
 

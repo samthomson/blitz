@@ -459,28 +459,44 @@ export function DMProvider({ children, config }: DMProviderProps) {
 
   const getInboxRelaysForPubkey = useCallback(async (pubkey: string): Promise<string[]> => {
     try {
-      const relayGroup = nostr.group(userInboxRelays);
+      const relayGroup = nostr.group(appConfig.discoveryRelays);
       const events = await relayGroup.query(
-        [{ kinds: [10002], authors: [pubkey], limit: 1 }],
+        [{ kinds: [10002, 10050], authors: [pubkey] }],
         { signal: AbortSignal.timeout(3000) }
       );
 
-      if (events.length === 0) {
-        return userInboxRelays;
+      // Priority 1: Check for 10050 (DM inbox relays)
+      const dmEvent = events.find(e => e.kind === 10050);
+      if (dmEvent) {
+        const relays = dmEvent.tags
+          .filter(tag => tag[0] === 'relay')
+          .map(tag => tag[1])
+          .filter(Boolean);
+        if (relays.length > 0) {
+          return relays;
+        }
       }
 
-      const readRelays = events[0].tags
-        .filter(tag => tag[0] === 'r')
-        .filter(tag => !tag[2] || tag[2] === 'read')
-        .map(tag => tag[1])
-        .filter(Boolean);
+      // Priority 2: Check for 10002 (NIP-65 read relays)
+      const nip65Event = events.find(e => e.kind === 10002);
+      if (nip65Event) {
+        const readRelays = nip65Event.tags
+          .filter(tag => tag[0] === 'r')
+          .filter(tag => !tag[2] || tag[2] === 'read')
+          .map(tag => tag[1])
+          .filter(Boolean);
+        if (readRelays.length > 0) {
+          return readRelays;
+        }
+      }
 
-      return readRelays.length > 0 ? readRelays : userInboxRelays;
+      // Priority 3: Fallback to discovery relays
+      return appConfig.discoveryRelays;
     } catch (error) {
       console.error('[DM] Failed to fetch inbox relays for', pubkey, error);
-      return userInboxRelays;
+      return appConfig.discoveryRelays;
     }
-  }, [nostr, userInboxRelays]);
+  }, [nostr, appConfig.discoveryRelays]);
 
   // ============================================================================
   // Internal Message Sending Mutations
@@ -1791,18 +1807,19 @@ export function DMProvider({ children, config }: DMProviderProps) {
       if (uniquePubkeys.length === 0) return;
 
       // Bulk fetch all relay lists in ONE query (much more efficient)
-      const relayLists = await fetchRelayListsBulk(nostr, userInboxRelays, uniquePubkeys);
+      // Returns Map<pubkey, RelayListResult> with both 10050 and 10002
+      const relayLists = await fetchRelayListsBulk(nostr, appConfig.discoveryRelays, uniquePubkeys);
 
-      // Cache each result in React Query
-      relayLists.forEach((relays, pubkey) => {
-        queryClient.setQueryData(['nostr', 'relay-list', pubkey], relays);
+      // Cache each result in React Query (same format as useRelayLists)
+      relayLists.forEach((relayListResult, pubkey) => {
+        queryClient.setQueryData(['nostr', 'relay-list', pubkey], relayListResult);
       });
 
       console.debug(`[DM] Pre-fetched ${relayLists.size}/${uniquePubkeys.length} relay lists`);
     };
 
     fetchRelayLists();
-  }, [enabled, conversations, nostr, userInboxRelays, queryClient, userPubkey]);
+  }, [enabled, conversations, nostr, appConfig.discoveryRelays, queryClient, userPubkey]);
 
   // Write to store
   const writeAllMessagesToStore = useCallback(async () => {
