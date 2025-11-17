@@ -21,12 +21,16 @@ export async function fetchRelayListsBulk(
 
   try {
     // Single query for all pubkeys, query both 10050 and 10002
+    // Replaceable events: each relay stores only the latest per pubkey+kind
+    // But different relays may have different "latest" events if user published updates to only some relays
     const events = await relayGroup.query(
-      [{ kinds: [10002, 10050], authors: pubkeys, limit: pubkeys.length * 2 }],
+      [{ kinds: [10002, 10050], authors: pubkeys }],
       { signal: AbortSignal.timeout(15000) }
     );
 
     // Group events by pubkey and kind, keep only latest per pubkey+kind
+    // This handles cases where different relays return different "latest" events
+    // (e.g., user published newer event to relay A but not relay B)
     const eventsByPubkeyAndKind = new Map<string, typeof events[0]>();
     for (const event of events) {
       const key = `${event.pubkey}:${event.kind}`;
@@ -127,5 +131,32 @@ export function getInboxRelays(relays: RelayEntry[]): string[] {
  */
 export function getOutboxRelays(relays: RelayEntry[]): string[] {
   return relays.filter(r => r.write).map(r => r.url);
+}
+
+/**
+ * Extract inbox relays from RelayListResult using priority:
+ * 1. 10050 DM inbox relays
+ * 2. 10002 read relays
+ * 3. Discovery relays (fallback)
+ * 
+ * This is the canonical function for determining which relays to use for reading/queries.
+ */
+export function extractInboxRelays(
+  relayListResult: RelayListResult | null | undefined,
+  discoveryRelays: string[]
+): string[] {
+  // Priority 1: NIP-17 DM inbox relays (kind 10050)
+  if (relayListResult?.dmInbox?.relays && relayListResult.dmInbox.relays.length > 0) {
+    return relayListResult.dmInbox.relays;
+  }
+  
+  // Priority 2: NIP-65 read relays (kind 10002)
+  const readRelays = relayListResult?.nip65?.relays?.filter(r => r.read)?.map(r => r.url);
+  if (readRelays && readRelays.length > 0) {
+    return readRelays;
+  }
+  
+  // Priority 3: Discovery relays
+  return discoveryRelays;
 }
 

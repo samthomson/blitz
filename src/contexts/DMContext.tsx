@@ -5,10 +5,10 @@ import { useNostr } from '@nostrify/react';
 import { useAppContext } from '@/hooks/useAppContext';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { useToast } from '@/hooks/useToast';
-import { useRelayLists } from '@/hooks/useRelayList';
+import { useRelayLists, type RelayListResult } from '@/hooks/useRelayList';
 import { validateDMEvent, createConversationId, parseConversationId } from '@/lib/dmUtils';
 import { LOADING_PHASES, type LoadingPhase, PROTOCOL_MODE, type ProtocolMode } from '@/lib/dmConstants';
-import { fetchRelayListsBulk } from '@/lib/relayUtils';
+import { fetchRelayListsBulk, extractInboxRelays } from '@/lib/relayUtils';
 import { NSecSigner, type NostrEvent } from '@nostrify/nostrify';
 import { generateSecretKey } from 'nostr-tools';
 import type { MessageProtocol } from '@/lib/dmConstants';
@@ -402,21 +402,9 @@ export function DMProvider({ children, config }: DMProviderProps) {
   // Get user's relay lists (both 10002 and 10050 in one query)
   const { data: relayLists } = useRelayLists();
   
-  // Extract user's inbox relays with priority fallback: 10050 → 10002 read relays → discovery relays
+  // Extract user's inbox relays using shared utility (10050 → 10002 read → discovery)
   const userInboxRelays = useMemo(() => {
-    // Priority 1: NIP-17 DM inbox relays (kind 10050)
-    if (relayLists?.dmInbox?.relays && relayLists.dmInbox.relays.length > 0) {
-      return relayLists.dmInbox.relays;
-    }
-    
-    // Priority 2: NIP-65 read relays (kind 10002)
-    const readRelays = relayLists?.nip65?.relays?.filter(r => r.read)?.map(r => r.url);
-    if (readRelays && readRelays.length > 0) {
-      return readRelays;
-    }
-    
-    // Priority 3: Discovery relays
-    return appConfig.discoveryRelays;
+    return extractInboxRelays(relayLists, appConfig.discoveryRelays);
   }, [relayLists, appConfig.discoveryRelays]);
 
   // Track relay list changes by event IDs
@@ -459,44 +447,25 @@ export function DMProvider({ children, config }: DMProviderProps) {
 
   const getInboxRelaysForPubkey = useCallback(async (pubkey: string): Promise<string[]> => {
     try {
-      const relayGroup = nostr.group(appConfig.discoveryRelays);
-      const events = await relayGroup.query(
-        [{ kinds: [10002, 10050], authors: [pubkey] }],
-        { signal: AbortSignal.timeout(3000) }
-      );
-
-      // Priority 1: Check for 10050 (DM inbox relays)
-      const dmEvent = events.find(e => e.kind === 10050);
-      if (dmEvent) {
-        const relays = dmEvent.tags
-          .filter(tag => tag[0] === 'relay')
-          .map(tag => tag[1])
-          .filter(Boolean);
-        if (relays.length > 0) {
-          return relays;
-        }
+      // First, check React Query cache (populated by pre-fetch effect)
+      const cached = queryClient.getQueryData<RelayListResult>(['nostr', 'relay-list', pubkey]);
+      
+      if (cached) {
+        // Use shared utility to extract inbox relays
+        return extractInboxRelays(cached, appConfig.discoveryRelays);
       }
 
-      // Priority 2: Check for 10002 (NIP-65 read relays)
-      const nip65Event = events.find(e => e.kind === 10002);
-      if (nip65Event) {
-        const readRelays = nip65Event.tags
-          .filter(tag => tag[0] === 'r')
-          .filter(tag => !tag[2] || tag[2] === 'read')
-          .map(tag => tag[1])
-          .filter(Boolean);
-        if (readRelays.length > 0) {
-          return readRelays;
-        }
-      }
-
-      // Priority 3: Fallback to discovery relays
-      return appConfig.discoveryRelays;
+      // Not in cache - use bulk fetch utility (handles single pubkey efficiently)
+      const relayLists = await fetchRelayListsBulk(nostr, appConfig.discoveryRelays, [pubkey]);
+      const relayListResult = relayLists.get(pubkey);
+      
+      // Use shared utility to extract inbox relays
+      return extractInboxRelays(relayListResult, appConfig.discoveryRelays);
     } catch (error) {
       console.error('[DM] Failed to fetch inbox relays for', pubkey, error);
       return appConfig.discoveryRelays;
     }
-  }, [nostr, appConfig.discoveryRelays]);
+  }, [nostr, appConfig.discoveryRelays, queryClient]);
 
   // ============================================================================
   // Internal Message Sending Mutations

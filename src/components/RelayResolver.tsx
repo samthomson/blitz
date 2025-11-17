@@ -1,6 +1,8 @@
 import { useEffect, useRef, ReactNode } from 'react';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useRelayLists } from '@/hooks/useRelayList';
+import { useAppContext } from '@/hooks/useAppContext';
+import { extractInboxRelays } from '@/lib/relayUtils';
 
 interface RelayResolverProps {
   children: ReactNode;
@@ -10,6 +12,7 @@ interface RelayResolverProps {
 export function RelayResolver({ children, activeRelaysRef }: RelayResolverProps) {
   const { user } = useCurrentUser();
   const { data: relayLists, isLoading } = useRelayLists();
+  const { config } = useAppContext();
   const hasResolved = useRef(false);
 
   useEffect(() => {
@@ -20,20 +23,22 @@ export function RelayResolver({ children, activeRelaysRef }: RelayResolverProps)
 
     if (isLoading) return;
 
+    // Use shared utility to extract inbox relays (10050 > 10002 read > discovery)
+    const inboxRelays = extractInboxRelays(relayLists, config.discoveryRelays);
+    activeRelaysRef.current = inboxRelays;
+    
     if (relayLists?.dmInbox?.relays && relayLists.dmInbox.relays.length > 0) {
-      activeRelaysRef.current = relayLists.dmInbox.relays;
-      console.log('[RelayResolver] Using kind 10050 relays:', relayLists.dmInbox.relays);
+      console.log('[RelayResolver] Using kind 10050 relays:', inboxRelays);
     } else if (relayLists?.nip65?.relays && relayLists.nip65.relays.length > 0) {
-      activeRelaysRef.current = relayLists.nip65.relays.map(r => r.url);
-      console.log('[RelayResolver] Using kind 10002 relays:', activeRelaysRef.current);
+      console.log('[RelayResolver] Using kind 10002 read relays:', inboxRelays);
     } else {
-      console.log('[RelayResolver] No relay lists found, keeping discovery relays:', activeRelaysRef.current);
+      console.log('[RelayResolver] No relay lists found, using discovery relays:', inboxRelays);
     }
 
     if (!hasResolved.current) {
       hasResolved.current = true;
     }
-  }, [user?.pubkey, relayLists, isLoading, activeRelaysRef]);
+  }, [user?.pubkey, relayLists, isLoading, activeRelaysRef, config.discoveryRelays]);
 
   if (user?.pubkey && isLoading) {
     return (
