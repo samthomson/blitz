@@ -1,4 +1,4 @@
-import { MessageSquare, Settings, HelpCircle } from 'lucide-react';
+import { MessageSquare, Settings, HelpCircle, User, LogOut } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -7,13 +7,18 @@ import { useAuthor } from '@/hooks/useAuthor';
 import { genUserName } from '@/lib/genUserName';
 import { HelpDialog } from '@/components/HelpDialog';
 import { SettingsModal } from '@/components/SettingsModal';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { useNavigate } from 'react-router-dom';
+import { useLoggedInAccounts } from '@/hooks/useLoggedInAccounts';
 
 export function AppSidebar() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const { user } = useCurrentUser();
+  const { currentUser, removeLogin } = useLoggedInAccounts();
   const author = useAuthor(user?.pubkey || '');
   const metadata = author.data?.metadata;
+  const navigate = useNavigate();
 
   const displayName = metadata?.name || genUserName(user?.pubkey || '');
   const avatarUrl = metadata?.picture;
@@ -53,12 +58,44 @@ export function AppSidebar() {
         </Button>
 
         {/* User Avatar - Bottom */}
-        <Avatar className="h-10 w-10 cursor-pointer opacity-40 hover:opacity-100 transition-opacity">
-          <AvatarImage src={avatarUrl} alt={displayName} />
-          <AvatarFallback className="bg-primary text-primary-foreground">
-            {initials}
-          </AvatarFallback>
-        </Avatar>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button className="rounded-full focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2">
+              <Avatar className="h-10 w-10 cursor-pointer opacity-70 hover:opacity-100 transition-opacity">
+                <AvatarImage src={avatarUrl} alt={displayName} />
+                <AvatarFallback className="bg-primary text-primary-foreground">
+                  {initials}
+                </AvatarFallback>
+              </Avatar>
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" side="right" className="w-56">
+            <div className="flex items-center gap-2 p-2">
+              <Avatar className="h-8 w-8">
+                <AvatarImage src={avatarUrl} alt={displayName} />
+                <AvatarFallback className="bg-primary text-primary-foreground text-xs">
+                  {initials}
+                </AvatarFallback>
+              </Avatar>
+              <div className="flex-1 truncate">
+                <p className="text-sm font-medium truncate">{displayName}</p>
+              </div>
+            </div>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => navigate('/profile')} className="cursor-pointer">
+              <User className="mr-2 h-4 w-4" />
+              <span>Edit Profile</span>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem 
+              onClick={() => currentUser && removeLogin(currentUser.id)} 
+              className="cursor-pointer text-red-500"
+            >
+              <LogOut className="mr-2 h-4 w-4" />
+              <span>Log out</span>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       <HelpDialog open={helpOpen} onOpenChange={setHelpOpen} />
