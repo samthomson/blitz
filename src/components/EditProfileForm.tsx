@@ -49,7 +49,7 @@ export const EditProfileForm: React.FC = () => {
   const form = useForm<NostrMetadata>({
     resolver: zodResolver(n.metadata()),
     defaultValues: {
-      name: '',
+      display_name: '',
       picture: '',
     },
   });
@@ -58,7 +58,7 @@ export const EditProfileForm: React.FC = () => {
   useEffect(() => {
     if (metadata) {
       form.reset({
-        name: metadata.name || '',
+        display_name: metadata.display_name || metadata.name || '',
         picture: metadata.picture || '',
       });
     }
@@ -157,7 +157,7 @@ export const EditProfileForm: React.FC = () => {
 
         <FormField
           control={form.control}
-          name="name"
+          name="display_name"
           render={({ field }) => (
             <FormItem>
               <FormLabel>Name</FormLabel>
