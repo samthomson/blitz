@@ -38,14 +38,20 @@ export function useAuthor(pubkey: string | undefined) {
       
       // 4. Query their write relays for their profile
       const relayGroup = nostr.group(theirWriteRelays);
-      const [event] = await relayGroup.query(
+      const events = await relayGroup.query(
         [{ kinds: [0], authors: [pubkey], limit: 1 }],
         { signal: AbortSignal.any([signal, AbortSignal.timeout(1500)]) },
       );
 
-      if (!event) {
+      if (events.length === 0) {
         return {};
       }
+      
+      // Take the NEWEST event (highest created_at) to handle replaceable events correctly
+      // Different relays may return different versions if updates were only sent to some relays
+      const event = events.reduce((newest, current) => 
+        current.created_at > newest.created_at ? current : newest
+      );
 
       try {
         const metadata = n.json().pipe(n.metadata()).parse(event.content);
