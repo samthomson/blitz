@@ -13,7 +13,7 @@ const Index = () => {
   const { theme, setTheme } = useTheme();
 
   useSeoMeta({
-    title: 'Doduo - Private Messaging on Nostr',
+    title: 'Silent - Private Messaging on Nostr',
     description: 'End-to-end encrypted messaging powered by Nostr. Signal-like privacy with decentralized infrastructure.',
   });
 
