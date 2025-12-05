@@ -1,4 +1,4 @@
-import { useMemo, useState, memo } from 'react';
+import { useMemo, useState, memo, useEffect, useRef } from 'react';
 import { Info, Loader2 } from 'lucide-react';
 import { useDMContext } from '@/contexts/DMContext';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
@@ -249,6 +249,7 @@ export const DMConversationList = ({
 }: DMConversationListProps) => {
   const { conversations, isLoading, loadingPhase } = useDMContext();
   const [activeTab, setActiveTab] = useState<'known' | 'requests'>('known');
+  const prevWasRequestRef = useRef<Set<string>>(new Set());
 
   // Filter conversations by type
   const { knownConversations, requestConversations } = useMemo(() => {
@@ -257,6 +258,22 @@ export const DMConversationList = ({
       requestConversations: conversations.filter(c => c.isRequest),
     };
   }, [conversations]);
+
+  // Auto-switch to "known" tab when a request conversation becomes known
+  useEffect(() => {
+    if (!selectedPubkey) return;
+    
+    const selectedConversation = conversations.find(c => c.pubkey === selectedPubkey);
+    if (!selectedConversation) return;
+    
+    // If this was a request but is now known, switch to known tab
+    if (selectedConversation.isKnown && prevWasRequestRef.current.has(selectedPubkey)) {
+      setActiveTab('known');
+      prevWasRequestRef.current.delete(selectedPubkey);
+    } else if (selectedConversation.isRequest) {
+      prevWasRequestRef.current.add(selectedPubkey);
+    }
+  }, [selectedPubkey, conversations]);
 
   // Get the current list based on active tab
   const currentConversations = activeTab === 'known' ? knownConversations : requestConversations;
