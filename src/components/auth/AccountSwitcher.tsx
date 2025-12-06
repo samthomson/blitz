@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/dropdown-menu.tsx';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar.tsx';
 import { WalletModal } from '@/components/WalletModal';
-import { useLoggedInAccounts, type Account } from '@/hooks/useLoggedInAccounts';
+import { useLoggedInAccounts } from '@/hooks/useLoggedInAccounts';
 import { getDisplayName } from '@/lib/genUserName';
 
 interface AccountSwitcherProps {
