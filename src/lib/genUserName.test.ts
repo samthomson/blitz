@@ -7,8 +7,8 @@ describe('genUserName', () => {
     const pubkey = 'e4690a13290739da123aa17d553851dec4cdd0e9d89aa18de3741c446caf8761';
     const name = genUserName(pubkey);
     
-    // Should return truncated npub format
-    expect(name).toMatch(/^npub1.{4}\.\.\..{4}$/);
+    // Should return truncated npub format: npub1XXX...XXXX (first 8 chars + ... + last 4 chars)
+    expect(name).toMatch(/^npub1.{3}\.\.\..{4}$/);
     expect(name.startsWith('npub1')).toBe(true);
     expect(name).toContain('...');
   });

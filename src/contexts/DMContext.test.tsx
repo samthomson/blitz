@@ -51,11 +51,24 @@ const mockUser = {
   },
 };
 
+// Create shared event spy so all nostr.event(), group().event(), and relay().event() calls are tracked
+const sharedEventSpy = vi.fn(async (event: NostrEvent) => event);
+
 // Mock nostr client
 const mockNostr = {
-  event: vi.fn(async (event: NostrEvent) => event),
+  event: sharedEventSpy,
   query: vi.fn(async () => []),
   req: vi.fn(() => ({ close: vi.fn() })),
+  group: vi.fn((_relays: string[]) => ({
+    event: sharedEventSpy, // Use the same spy so calls are tracked
+    query: vi.fn(async () => []),
+    req: vi.fn(() => ({ close: vi.fn() })),
+  })),
+  relay: vi.fn((_relay: string) => ({
+    event: sharedEventSpy, // Use the same spy so calls are tracked
+    query: vi.fn(async () => []),
+    req: vi.fn(() => ({ close: vi.fn() })),
+  })),
 };
 
 // Mock useCurrentUser
@@ -90,6 +103,31 @@ vi.mock('@/hooks/useNostrPublish', () => ({
       return event;
     }),
   }),
+}));
+
+// Mock useRelayLists
+vi.mock('@/hooks/useRelayList', () => ({
+  useRelayLists: () => ({
+    data: {
+      outbox: { relays: ['wss://relay1.test.com', 'wss://relay2.test.com'], eventId: 'outbox-event-123' },
+      dmInbox: { relays: ['wss://relay1.test.com'], eventId: 'dm-event-123' },
+    },
+    isLoading: false,
+  }),
+}));
+
+// Mock useToast
+vi.mock('@/hooks/useToast', () => ({
+  useToast: () => ({
+    toast: vi.fn(),
+  }),
+}));
+
+// Mock relay utilities
+vi.mock('@/lib/relayUtils', () => ({
+  fetchRelayListsBulk: vi.fn(async () => new Map()),
+  extractInboxRelays: vi.fn(() => ['wss://relay1.test.com', 'wss://relay2.test.com']),
+  extractOutboxRelays: vi.fn(() => ['wss://relay1.test.com', 'wss://relay2.test.com']),
 }));
 
 // Mock useAppContext
@@ -149,10 +187,11 @@ describe('DMContext - Message Creation', () => {
       const { result } = renderHook(() => useDMContext(), { wrapper });
 
       await waitFor(() => {
-        expect(result.current).toBeDefined();
+        expect(result.current).not.toBeNull();
+        expect(result.current?.sendMessage).toBeDefined();
       });
 
-      await result.current.sendMessage({
+      await result.current!.sendMessage({
         recipientPubkey: 'recipient-pubkey-456',
         content: 'Hello NIP-04!',
         protocol: MESSAGE_PROTOCOL.NIP04,
@@ -196,10 +235,11 @@ describe('DMContext - Message Creation', () => {
       const { result } = renderHook(() => useDMContext(), { wrapper });
 
       await waitFor(() => {
-        expect(result.current).toBeDefined();
+        expect(result.current).not.toBeNull();
+        expect(result.current?.sendMessage).toBeDefined();
       });
 
-      await result.current.sendMessage({
+      await result.current!.sendMessage({
         recipientPubkey: ['recipient-1', 'recipient-2', 'recipient-3'],
         content: 'Group message attempt',
         protocol: MESSAGE_PROTOCOL.NIP04,
@@ -231,10 +271,11 @@ describe('DMContext - Message Creation', () => {
       const { result } = renderHook(() => useDMContext(), { wrapper });
 
       await waitFor(() => {
-        expect(result.current).toBeDefined();
+        expect(result.current).not.toBeNull();
+        expect(result.current?.sendMessage).toBeDefined();
       });
 
-      await result.current.sendMessage({
+      await result.current!.sendMessage({
         recipientPubkey: 'recipient-pubkey-456',
         content: 'Hello NIP-17!',
         protocol: MESSAGE_PROTOCOL.NIP17,
@@ -316,10 +357,11 @@ describe('DMContext - Message Creation', () => {
       const { result } = renderHook(() => useDMContext(), { wrapper });
 
       await waitFor(() => {
-        expect(result.current).toBeDefined();
+        expect(result.current).not.toBeNull();
+        expect(result.current?.sendMessage).toBeDefined();
       });
 
-      await result.current.sendMessage({
+      await result.current!.sendMessage({
         recipientPubkey: mockUser.pubkey,
         content: 'Note to self',
         protocol: MESSAGE_PROTOCOL.NIP17,
@@ -365,10 +407,11 @@ describe('DMContext - Message Creation', () => {
       const { result } = renderHook(() => useDMContext(), { wrapper });
 
       await waitFor(() => {
-        expect(result.current).toBeDefined();
+        expect(result.current).not.toBeNull();
+        expect(result.current?.sendMessage).toBeDefined();
       });
 
-      await result.current.sendMessage({
+      await result.current!.sendMessage({
         recipientPubkey: [
           'recipient-1',
           'recipient-2',
@@ -438,10 +481,11 @@ describe('DMContext - Message Creation', () => {
       const { result } = renderHook(() => useDMContext(), { wrapper });
 
       await waitFor(() => {
-        expect(result.current).toBeDefined();
+        expect(result.current).not.toBeNull();
+        expect(result.current?.sendMessage).toBeDefined();
       });
 
-      await result.current.sendMessage({
+      await result.current!.sendMessage({
         recipientPubkey: mockUser.pubkey,
         content: 'First self message',
         protocol: MESSAGE_PROTOCOL.NIP17,
@@ -474,10 +518,11 @@ describe('DMContext - Message Creation', () => {
       const { result } = renderHook(() => useDMContext(), { wrapper });
 
       await waitFor(() => {
-        expect(result.current).toBeDefined();
+        expect(result.current).not.toBeNull();
+        expect(result.current?.sendMessage).toBeDefined();
       });
 
-      await result.current.sendMessage({
+      await result.current!.sendMessage({
         recipientPubkey: 'recipient-xyz',
         content: 'Hello',
         protocol: MESSAGE_PROTOCOL.NIP17,
@@ -503,10 +548,11 @@ describe('DMContext - Message Creation', () => {
       const { result } = renderHook(() => useDMContext(), { wrapper });
 
       await waitFor(() => {
-        expect(result.current).toBeDefined();
+        expect(result.current).not.toBeNull();
+        expect(result.current?.sendMessage).toBeDefined();
       });
 
-      await result.current.sendMessage({
+      await result.current!.sendMessage({
         recipientPubkey: ['alice', 'bob', 'charlie'],
         content: 'Group hello',
         protocol: MESSAGE_PROTOCOL.NIP17,

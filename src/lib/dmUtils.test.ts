@@ -195,8 +195,8 @@ describe('dmUtils', () => {
       const thisYearTimestamp = Math.floor(thisYear.getTime() / 1000);
       const formatted = formatConversationTime(thisYearTimestamp);
       
-      // Should show month and day (format varies by locale: "Jan 15" or "15 Jan")
-      expect(formatted).toMatch(/^(\w{3}\s+\d{1,2}|\d{1,2}\s+\w{3})$/);
+      // Should show month and day (format varies by locale: "Jan 15", "15 Jan", or "15 Sept")
+      expect(formatted).toMatch(/^(\w{3,4}\s+\d{1,2}|\d{1,2}\s+\w{3,4})$/);
       // Should NOT contain year
       expect(formatted).not.toMatch(/\d{4}/);
     });
@@ -209,7 +209,7 @@ describe('dmUtils', () => {
       
       // Should include month, day, and year (format varies by locale)
       expect(formatted).toMatch(/\d{4}/); // Must have year
-      expect(formatted).toMatch(/\w{3}/); // Must have month abbreviation
+      expect(formatted).toMatch(/\w{3,4}/); // Must have month abbreviation (3-4 chars like Jan or Sept)
       expect(formatted).toMatch(/\d{1,2}/); // Must have day
     });
   });

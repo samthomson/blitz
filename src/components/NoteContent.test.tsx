@@ -128,8 +128,8 @@ describe('NoteContent', () => {
     expect(mention).toHaveClass('text-gray-500');
     expect(mention).not.toHaveClass('text-blue-500');
     
-    // The text should be @ followed by truncated npub format
+    // The text should be @ followed by truncated npub format: @npub1XXX...XXXX
     const linkText = mention.textContent;
-    expect(linkText).toMatch(/^@npub1.{4}\.\.\..{4}$/); // Should be truncated npub format
+    expect(linkText).toMatch(/^@npub1.{3}\.\.\..{4}$/); // Should be truncated npub format
   });
 });
