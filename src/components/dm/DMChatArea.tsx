@@ -15,10 +15,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ArrowLeft, Send, Loader2, AlertTriangle, FileJson, FileLock, Server } from 'lucide-react';
+import { ArrowLeft, Send, Loader2, AlertTriangle, FileJson, FileLock, Server, ExternalLink, Copy, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { NoteContent } from '@/components/NoteContent';
 import type { NostrEvent } from '@nostrify/nostrify';
+import { nip19 } from 'nostr-tools';
 
 interface DMChatAreaProps {
   conversationId: string | null;
@@ -419,6 +420,131 @@ const RelayUserLabels = ({ users, authorsMap }: {
   );
 };
 
+// Modal to display participant profile information
+const ParticipantInfoModal = ({ open, onOpenChange, conversationId }: { 
+  open: boolean; 
+  onOpenChange: (open: boolean) => void; 
+  conversationId: string;
+}) => {
+  const { user } = useCurrentUser();
+  const [copiedPubkey, setCopiedPubkey] = useState<string | null>(null);
+  
+  // Parse all participants
+  const allParticipants = useMemo(() => parseConversationId(conversationId), [conversationId]);
+  
+  // Fetch all participant profiles
+  const authorsData = useAuthorsBatch(allParticipants);
+
+  const handleCopyNpub = useCallback((pubkey: string) => {
+    const npub = nip19.npubEncode(pubkey);
+    navigator.clipboard.writeText(npub);
+    setCopiedPubkey(pubkey);
+    setTimeout(() => setCopiedPubkey(null), 2000);
+  }, []);
+
+  const getExternalLink = useCallback((pubkey: string) => `https://nostr.band/${nip19.npubEncode(pubkey)}`, []);
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Participants</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          {allParticipants.map((pubkey) => {
+            const isCurrentUser = pubkey === user?.pubkey;
+            const authorData = authorsData.data.get(pubkey);
+            const metadata = authorData?.metadata;
+            const displayName = getDisplayName(pubkey, metadata);
+            const npub = nip19.npubEncode(pubkey);
+            const bgColor = getPubkeyColor(pubkey);
+
+            return (
+              <div key={pubkey} className="flex gap-3 p-3 rounded-lg border bg-card">
+                <Avatar className="h-12 w-12 flex-shrink-0">
+                  <AvatarImage src={metadata?.picture} alt={displayName} />
+                  <AvatarFallback className="text-white" style={{ backgroundColor: bgColor }}>
+                    {displayName.slice(0, 2).toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
+                
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <h3 className="font-semibold text-sm truncate">
+                      {displayName}
+                      {isCurrentUser && (
+                        <span className="ml-2 text-xs font-normal text-muted-foreground">(You)</span>
+                      )}
+                    </h3>
+                  </div>
+                  
+                  {metadata?.nip05 && (
+                    <p className="text-xs text-muted-foreground truncate mb-1">
+                      ✓ {metadata.nip05}
+                    </p>
+                  )}
+                  
+                  {metadata?.about && (
+                    <p className="text-xs text-muted-foreground line-clamp-2 mb-2">
+                      {metadata.about}
+                    </p>
+                  )}
+                  
+                  <div className="flex items-center gap-2 mt-2">
+                    <code className="text-xs bg-muted px-2 py-1 rounded flex-1 break-all">
+                      {npub}
+                    </code>
+                    
+                    <TooltipProvider>
+                      <Tooltip delayDuration={500}>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7"
+                            onClick={() => handleCopyNpub(pubkey)}
+                          >
+                            {copiedPubkey === pubkey ? (
+                              <Check className="h-3 w-3 text-green-600" />
+                            ) : (
+                              <Copy className="h-3 w-3" />
+                            )}
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p className="text-xs">Copy npub</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                    
+                    <TooltipProvider>
+                      <Tooltip delayDuration={500}>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7"
+                            onClick={() => window.open(getExternalLink(pubkey), '_blank')}
+                          >
+                            <ExternalLink className="h-3 w-3" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p className="text-xs">View on nostr.band</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
 // Modal to display relay information for a conversation
 const RelayInfoModal = ({ open, onOpenChange, conversationId }: { open: boolean; onOpenChange: (open: boolean) => void; conversationId: string }) => {
   const { user } = useCurrentUser();
@@ -475,6 +601,7 @@ const ChatHeader = ({ conversationId, onBack }: { conversationId: string; onBack
   const { user } = useCurrentUser();
   const { config } = useAppContext();
   const [showRelayModal, setShowRelayModal] = useState(false);
+  const [showParticipantModal, setShowParticipantModal] = useState(false);
   
   // Parse conversation participants and exclude current user from display
   const allParticipants = parseConversationId(conversationId);
@@ -517,42 +644,55 @@ const ChatHeader = ({ conversationId, onBack }: { conversationId: string; onBack
         </Button>
       )}
 
-      <ChatGroupAvatar pubkeys={isSelfMessaging ? [user!.pubkey] : conversationParticipants} />
-
       <div className="flex-1 min-w-0">
-        <h2 className="font-semibold truncate text-sm">
-          {isMultiPerson ? <ParticipantNames pubkeys={conversationParticipants} /> : displayName}
-        </h2>
-        {subtitle && (
-          <p className="text-xs text-muted-foreground truncate">{subtitle}</p>
-        )}
+        <button
+          onClick={() => setShowParticipantModal(true)}
+          className="flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 cursor-help hover:bg-accent"
+        >
+          <ChatGroupAvatar pubkeys={isSelfMessaging ? [user!.pubkey] : conversationParticipants} />
+
+          <div className="text-left">
+            <h2 className="font-semibold text-sm whitespace-nowrap">
+              {isMultiPerson ? <ParticipantNames pubkeys={conversationParticipants} /> : displayName}
+            </h2>
+            {subtitle && (
+              <p className="text-xs text-muted-foreground whitespace-nowrap">{subtitle}</p>
+            )}
+          </div>
+        </button>
       </div>
 
       {devMode && (
-        <>
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setShowRelayModal(true)}
-                >
-                  <Server className="h-5 w-5" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p className="text-xs">View relay information</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setShowRelayModal(true)}
+              >
+                <Server className="h-5 w-5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p className="text-xs">View relay information</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      )}
 
-          <RelayInfoModal
-            open={showRelayModal}
-            onOpenChange={setShowRelayModal}
-            conversationId={conversationId}
-          />
-        </>
+      <ParticipantInfoModal
+        open={showParticipantModal}
+        onOpenChange={setShowParticipantModal}
+        conversationId={conversationId}
+      />
+
+      {devMode && (
+        <RelayInfoModal
+          open={showRelayModal}
+          onOpenChange={setShowRelayModal}
+          conversationId={conversationId}
+        />
       )}
     </div>
   );
