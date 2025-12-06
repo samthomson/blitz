@@ -4,8 +4,8 @@ import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useAuthor } from '@/hooks/useAuthor';
 import { useAuthorsBatch } from '@/hooks/useAuthorsBatch';
 import { useAppContext } from '@/hooks/useAppContext';
-import { genUserName } from '@/lib/genUserName';
 import { MESSAGE_PROTOCOL, PROTOCOL_MODE, type MessageProtocol } from '@/lib/dmConstants';
+import { getDisplayName } from '@/lib/genUserName';
 import { formatConversationTime, formatFullDateTime, parseConversationId, getPubkeyColor } from '@/lib/dmUtils';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -127,7 +127,7 @@ const MessageBubble = memo(({
   // Fetch sender profile for group chats
   const senderProfile = useAuthor(message.pubkey);
   const metadata = senderProfile.data?.metadata;
-  const senderName = metadata?.display_name || metadata?.name || genUserName(message.pubkey);
+  const senderName = getDisplayName(message.pubkey, metadata);
   const senderColor = getPubkeyColor(message.pubkey);
 
   // Create a NostrEvent object for NoteContent (only used for kind 15)
@@ -285,7 +285,7 @@ const ChatGroupAvatar = ({ pubkeys }: { pubkeys: string[] }) => {
 
   if (pubkeys.length === 1) {
     const metadata = author1.data?.metadata;
-    const displayName = metadata?.name || genUserName(pubkeys[0]);
+    const displayName = getDisplayName(pubkeys[0], metadata);
     const avatarUrl = metadata?.picture;
     const initials = displayName.slice(0, 2).toUpperCase();
     const bgColor = getPubkeyColor(pubkeys[0]);
@@ -365,8 +365,8 @@ const ParticipantNames = ({ pubkeys }: { pubkeys: string[] }) => {
   const author1 = useAuthor(pubkeys[0]);
   const author2 = useAuthor(pubkeys[1]);
 
-  const name1 = author1.data?.metadata?.name || genUserName(pubkeys[0]);
-  const name2 = author2.data?.metadata?.name || genUserName(pubkeys[1]);
+  const name1 = getDisplayName(pubkeys[0], author1.data?.metadata);
+  const name2 = getDisplayName(pubkeys[1], author2.data?.metadata);
 
   if (pubkeys.length === 1) {
     return <span>{name1}</span>;
@@ -390,7 +390,7 @@ const RelayUserLabels = ({ users, authorsMap }: {
     
     const authorData = authorsMap.get(user.pubkey);
     const metadata = authorData?.metadata;
-    const displayName = metadata?.name || genUserName(user.pubkey);
+    const displayName = getDisplayName(user.pubkey, metadata);
     return { label: displayName, source: user.source, isCurrentUser: false };
   });
 
@@ -490,11 +490,12 @@ const ChatHeader = ({ conversationId, onBack }: { conversationId: string; onBack
 
   // Derive display values
   const isMultiPerson = conversationParticipants.length > 1;
+  const baseName = getDisplayName(displayPubkey || '', metadata);
   const displayName = isMultiPerson 
     ? null // Will use ParticipantNames component
     : isSelfMessaging
-      ? `${metadata?.name || genUserName(user?.pubkey || '')} (You)`
-      : metadata?.name || genUserName(displayPubkey || '');
+      ? `${baseName} (You)`
+      : baseName;
   const subtitle = isMultiPerson
     ? `${conversationParticipants.length} other participants`
     : isSelfMessaging

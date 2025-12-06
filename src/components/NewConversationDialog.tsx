@@ -18,6 +18,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
+import { getDisplayName } from '@/lib/genUserName';
 import { createConversationId, parseConversationId } from '@/lib/dmUtils';
 
 interface NewConversationDialogProps {
@@ -75,20 +76,6 @@ export function NewConversationDialog({ onStartConversation }: NewConversationDi
   
   // Show loading only for initial follows fetch, not metadata (UI renders immediately)
   const isLoading = isLoadingFollows;
-
-  const getDisplayName = (pubkey: string, metadata?: { name?: string; display_name?: string }) => {
-    // Check display_name first (richer), then name
-    if (metadata?.display_name) {
-      return metadata.display_name;
-    }
-    if (metadata?.name) {
-      return metadata.name;
-    }
-    
-    // Show truncated npub instead of fake generated name
-    const npub = nip19.npubEncode(pubkey);
-    return `${npub.slice(0, 8)}...${npub.slice(-4)}`;
-  };
 
   // Filter contacts based on search (now we can filter properly since we have metadata)
   const filteredContacts = useMemo(() => {

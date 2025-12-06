@@ -3,7 +3,7 @@ import { Info, Loader2 } from 'lucide-react';
 import { useDMContext } from '@/contexts/DMContext';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useAuthor } from '@/hooks/useAuthor';
-import { genUserName } from '@/lib/genUserName';
+import { getDisplayName } from '@/lib/genUserName';
 import { formatConversationTime, formatFullDateTime, parseConversationId, getPubkeyColor } from '@/lib/dmUtils';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -41,7 +41,7 @@ const GroupAvatar = ({ pubkeys, isSelected }: { pubkeys: string[]; isSelected: b
 
   if (pubkeys.length === 1) {
     const metadata = author1.data?.metadata;
-    const displayName = metadata?.name || genUserName(pubkeys[0]);
+    const displayName = getDisplayName(pubkeys[0], metadata);
     const avatarUrl = metadata?.picture;
     const initials = displayName.slice(0, 2).toUpperCase();
     const bgColor = getPubkeyColor(pubkeys[0]);
@@ -139,21 +139,21 @@ const ConversationItemComponent = ({
   
   const firstMetadata = firstParticipant.data?.metadata;
 
-  const getDisplayName = () => {
+  const conversationDisplayName = (() => {
     // Self-messaging conversation
     if (isSelfMessaging) {
-      const selfName = firstMetadata?.name || genUserName(user?.pubkey || '');
+      const selfName = getDisplayName(user?.pubkey || '', firstMetadata);
       return `${selfName} (You)`;
     }
 
     // If only one other person, show their name (1-on-1)
     if (conversationParticipants.length === 1) {
-      return firstMetadata?.name || genUserName(conversationParticipants[0]);
+      return getDisplayName(conversationParticipants[0], firstMetadata);
     }
 
     // Multiple people - show first 2 names + remaining count
-    const firstName = firstMetadata?.name || genUserName(conversationParticipants[0]);
-    const secondName = secondParticipant.data?.metadata?.name || genUserName(conversationParticipants[1]);
+    const firstName = getDisplayName(conversationParticipants[0], firstMetadata);
+    const secondName = getDisplayName(conversationParticipants[1], secondParticipant.data?.metadata);
 
     if (conversationParticipants.length === 2) {
       return `${firstName}, ${secondName}`;
@@ -161,9 +161,7 @@ const ConversationItemComponent = ({
       const remaining = conversationParticipants.length - 2;
       return `${firstName}, ${secondName}, +${remaining}`;
     }
-  };
-
-  const displayName = getDisplayName();
+  })();
 
   const lastMessagePreview = lastMessage?.error
     ? '🔒 Encrypted message'
@@ -193,7 +191,7 @@ const ConversationItemComponent = ({
               {isLoadingProfile ? (
                 <Skeleton className="h-[1.25rem] w-24" />
               ) : (
-                <span className="font-medium text-sm truncate">{displayName}</span>
+                <span className="font-medium text-sm truncate">{conversationDisplayName}</span>
               )}
             </div>
             <TooltipProvider>

@@ -1,29 +1,23 @@
-/** Generate a deterministic user display name based on a string seed. */
-export function genUserName(seed: string): string {
-  // Use a simple hash of the pubkey to generate consistent adjective + noun combinations
-  const adjectives = [
-    'Swift', 'Bright', 'Calm', 'Bold', 'Wise', 'Kind', 'Quick', 'Brave',
-    'Cool', 'Sharp', 'Clear', 'Strong', 'Smart', 'Fast', 'Keen', 'Pure',
-    'Noble', 'Gentle', 'Fierce', 'Steady', 'Clever', 'Proud', 'Silent', 'Wild'
-  ];
-  
-  const nouns = [
-    'Fox', 'Eagle', 'Wolf', 'Bear', 'Lion', 'Tiger', 'Hawk', 'Owl',
-    'Deer', 'Raven', 'Falcon', 'Lynx', 'Otter', 'Whale', 'Shark', 'Dolphin',
-    'Phoenix', 'Dragon', 'Panther', 'Jaguar', 'Cheetah', 'Leopard', 'Puma', 'Cobra'
-  ];
+import { nip19 } from 'nostr-tools';
+import type { NostrMetadata } from '@nostrify/nostrify';
 
-  // Create a simple hash from the pubkey
-  let hash = 0;
-  for (let i = 0; i < seed.length; i++) {
-    const char = seed.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash = hash & hash; // Convert to 32-bit integer
+/** Generate a display name for a pubkey by showing truncated npub format. */
+export function genUserName(pubkey: string): string {
+  // Show truncated npub instead of fake generated name
+  const npub = nip19.npubEncode(pubkey);
+  return `${npub.slice(0, 8)}...${npub.slice(-4)}`;
+}
+
+/**
+ * Get display name for a user from their metadata
+ * Prioritizes: display_name > name > truncated npub
+ */
+export function getDisplayName(pubkey: string, metadata?: NostrMetadata): string {
+  if (metadata?.display_name) {
+    return metadata.display_name;
   }
-  
-  // Use absolute value to ensure positive index
-  const adjIndex = Math.abs(hash) % adjectives.length;
-  const nounIndex = Math.abs(hash >> 8) % nouns.length;
-  
-  return [adjectives[adjIndex], nouns[nounIndex]].join(' ');
+  if (metadata?.name) {
+    return metadata.name;
+  }
+  return genUserName(pubkey);
 }

@@ -13,7 +13,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { DropdownMenu, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { MessageSquare, ChevronDown, ChevronRight, MoreHorizontal } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
-import { genUserName } from '@/lib/genUserName';
+import { getDisplayName } from '@/lib/genUserName';
 
 interface CommentProps {
   root: NostrEvent | URL;
@@ -31,7 +31,7 @@ export function Comment({ root, comment, depth = 0, maxDepth = 3, limit }: Comme
   const { data: commentsData } = useComments(root, limit);
   
   const metadata = author.data?.metadata;
-  const displayName = metadata?.name ?? genUserName(comment.pubkey)
+  const displayName = getDisplayName(comment.pubkey, metadata);
   const timeAgo = formatDistanceToNow(new Date(comment.created_at * 1000), { addSuffix: true });
 
   // Get direct replies to this comment
