@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "npm i --silent && vite",
     "build": "npm i --silent && vite build -l error && cp dist/index.html dist/404.html && echo 'Project built successfully!'",
-    "test": "npm i --silent && tsc --noEmit && eslint && vitest run --reporter=dot --silent && vite build -l error && cp dist/index.html dist/404.html && echo 'All tests passed!'",
+    "test": "npm i --silent && npx tsc --noEmit && eslint && vitest run --reporter=dot --silent && vite build -l error && cp dist/index.html dist/404.html && echo 'All tests passed!'",
     "deploy": "npm run build && npx -y nostr-deploy-cli deploy --skip-setup"
   },
   "dependencies": {
@@ -42,7 +42,9 @@
     "@radix-ui/react-toggle": "^1.1.0",
     "@radix-ui/react-toggle-group": "^1.1.0",
     "@radix-ui/react-tooltip": "^1.1.4",
+    "@tanstack/query-async-storage-persister": "^5.90.8",
     "@tanstack/react-query": "^5.56.2",
+    "@tanstack/react-query-persist-client": "^5.90.8",
     "@unhead/addons": "^2.0.10",
     "@unhead/react": "^2.0.10",
     "buffer": "^6.0.3",

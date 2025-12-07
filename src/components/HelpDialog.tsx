@@ -10,14 +10,21 @@ import { Button } from '@/components/ui/button';
 import { HelpCircle, Shield, Lock, Zap } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
-export function HelpDialog() {
+interface HelpDialogProps {
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+}
+
+export function HelpDialog({ open, onOpenChange }: HelpDialogProps = {}) {
   return (
-    <Dialog>
-      <DialogTrigger asChild>
-        <Button variant="ghost" size="icon" className="rounded-full">
-          <HelpCircle className="h-5 w-5" />
-        </Button>
-      </DialogTrigger>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      {!open && !onOpenChange && (
+        <DialogTrigger asChild>
+          <Button variant="ghost" size="icon" className="rounded-full">
+            <HelpCircle className="h-5 w-5" />
+          </Button>
+        </DialogTrigger>
+      )}
       <DialogContent className="max-w-2xl max-h-[80vh]">
         <DialogHeader>
           <DialogTitle>Welcome to Doduo</DialogTitle>

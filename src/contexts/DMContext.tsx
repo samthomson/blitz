@@ -1,12 +1,14 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode, useCallback, useMemo, useRef } from 'react';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useNostr } from '@nostrify/react';
 import { useAppContext } from '@/hooks/useAppContext';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { useToast } from '@/hooks/useToast';
-import { validateDMEvent } from '@/lib/dmUtils';
+import { useRelayLists, type RelayListResult } from '@/hooks/useRelayList';
+import { validateDMEvent, createConversationId, parseConversationId } from '@/lib/dmUtils';
 import { LOADING_PHASES, type LoadingPhase, PROTOCOL_MODE, type ProtocolMode } from '@/lib/dmConstants';
+import { fetchRelayListsBulk, extractInboxRelays } from '@/lib/relayUtils';
 import { NSecSigner, type NostrEvent } from '@nostrify/nostrify';
 import { generateSecretKey } from 'nostr-tools';
 import type { MessageProtocol } from '@/lib/dmConstants';
@@ -68,13 +70,14 @@ interface DecryptionResult {
   error?: string;
 }
 
-interface DecryptedMessage extends NostrEvent {
+export interface DecryptedMessage extends NostrEvent {
   decryptedContent?: string;
   error?: string;
   isSending?: boolean;
   clientFirstSeen?: number;
   decryptedEvent?: NostrEvent; // For NIP-17: the inner kind 14/15 event
   originalGiftWrapId?: string; // Store gift wrap ID for NIP-17 deduplication
+  originalGiftWrap?: NostrEvent; // Store full gift wrap for debugging
 }
 
 interface NIP17ProcessingResult {
@@ -132,6 +135,19 @@ const nip17ErrorLogger = createErrorLogger('NIP-17');
  * @property scanProgress - Progress info for large message history scans
  * @property clearCacheAndRefetch - Clear IndexedDB cache and reload all messages from relays
  */
+interface RelayError {
+  timestamp: number;
+  message: string;
+  protocol: MessageProtocol;
+  failedRelays: string[];
+  totalRelays: number;
+}
+
+export interface ConversationRelayInfo {
+  relay: string;
+  users: Array<{ pubkey: string; isCurrentUser: boolean; source: string }>;
+}
+
 interface DMContextType {
   messages: MessagesState;
   isLoading: boolean;
@@ -149,6 +165,11 @@ interface DMContextType {
   protocolMode: ProtocolMode;
   scanProgress: ScanProgressState;
   clearCacheAndRefetch: () => Promise<void>;
+  relayError: RelayError | null;
+  clearRelayError: () => void;
+  userInboxRelays: string[];
+  myRelayLists: RelayListResult | null | undefined;
+  getConversationRelays: (conversationId: string) => ConversationRelayInfo[];
 }
 
 const DMContext = createContext<DMContextType | null>(null);
@@ -382,11 +403,21 @@ export function DMProvider({ children, config }: DMProviderProps) {
   const { mutateAsync: createEvent } = useNostrPublish();
   const { toast } = useToast();
   const { config: appConfig } = useAppContext();
+  const queryClient = useQueryClient();
 
   const userPubkey = useMemo(() => user?.pubkey, [user?.pubkey]);
 
-  // Track relay URL to detect changes
-  const previousRelayUrl = useRef<string>(appConfig.relayUrl);
+  // Get user's relay lists (both 10002 and 10050 in one query)
+  const { data: relayLists } = useRelayLists();
+  
+  // Extract user's inbox relays using shared utility (10050 → 10002 read → discovery)
+  const userInboxRelays = useMemo(() => {
+    return extractInboxRelays(relayLists, appConfig.discoveryRelays);
+  }, [relayLists, appConfig.discoveryRelays]);
+
+  // Track relay list changes by event IDs
+  const previousDMEventId = useRef<string>();
+  const previousNIP65EventId = useRef<string>();
 
   // Determine if NIP-17 is enabled based on protocol mode
   const enableNIP17 = protocolMode !== PROTOCOL_MODE.NIP04_ONLY;
@@ -408,10 +439,41 @@ export function DMProvider({ children, config }: DMProviderProps) {
     nip4: null,
     nip17: null
   });
+  const [relayError, setRelayError] = useState<RelayError | null>(null);
 
   const nip4SubscriptionRef = useRef<{ close: () => void } | null>(null);
   const nip17SubscriptionRef = useRef<{ close: () => void } | null>(null);
   const debouncedWriteRef = useRef<NodeJS.Timeout | null>(null);
+
+  const clearRelayError = useCallback(() => {
+    setRelayError(null);
+  }, []);
+
+  // ============================================================================
+  // Helper: Get inbox relays for a pubkey
+  // ============================================================================
+
+  const getInboxRelaysForPubkey = useCallback(async (pubkey: string): Promise<string[]> => {
+    try {
+      // First, check React Query cache (populated by pre-fetch effect)
+      const cached = queryClient.getQueryData<RelayListResult>(['nostr', 'relay-list', pubkey]);
+      
+      if (cached) {
+        // Use shared utility to extract inbox relays
+        return extractInboxRelays(cached, appConfig.discoveryRelays);
+      }
+
+      // Not in cache - use bulk fetch utility (handles single pubkey efficiently)
+      const relayLists = await fetchRelayListsBulk(nostr, appConfig.discoveryRelays, [pubkey]);
+      const relayListResult = relayLists.get(pubkey);
+      
+      // Use shared utility to extract inbox relays
+      return extractInboxRelays(relayListResult, appConfig.discoveryRelays);
+    } catch (error) {
+      console.error('[DM] Failed to fetch inbox relays for', pubkey, error);
+      return appConfig.discoveryRelays;
+    }
+  }, [nostr, appConfig.discoveryRelays, queryClient]);
 
   // ============================================================================
   // Internal Message Sending Mutations
@@ -444,12 +506,26 @@ export function DMProvider({ children, config }: DMProviderProps) {
         ...createImetaTags(attachments)
       ];
 
-      // Create and publish the event
-      return await createEvent({
+      // Get inbox relays for both user and recipient
+      const [userInbox, recipientInbox] = await Promise.all([
+        Promise.resolve(userInboxRelays),
+        getInboxRelaysForPubkey(recipientPubkey)
+      ]);
+
+      // Combine both inboxes (NIP-4 is a shared event visible to both parties)
+      const publishRelays = Array.from(new Set([...userInbox, ...recipientInbox]));
+      const relayGroup = nostr.group(publishRelays);
+
+      // Sign the event using createEvent (includes "client" tag)
+      const signedEvent = await createEvent({
         kind: 4,
         content: encryptedContent,
         tags,
       });
+
+      // Publish to both inboxes
+      await relayGroup.event(signedEvent);
+      return signedEvent;
     },
     onError: (error) => {
       console.error('[DM] Failed to send NIP-04 message:', error);
@@ -512,7 +588,8 @@ export function DMProvider({ children, config }: DMProviderProps) {
 
       // Step 2: Create Kind 13 Seal events and Kind 1059 Gift Wraps for each recipient + sender
       // For NIP-17 group chats, we send a separate gift wrap to each participant
-      const allRecipients = [...recipients, user.pubkey]; // Include sender for message history
+      // Deduplicate to avoid sending duplicate gift wraps for self-messaging
+      const allRecipients = [...new Set([...recipients, user.pubkey])];
       const giftWraps: NostrEvent[] = [];
 
       for (const recipientPubkey of allRecipients) {
@@ -543,11 +620,27 @@ export function DMProvider({ children, config }: DMProviderProps) {
         giftWraps.push(giftWrap);
       }
 
-      // Publish all gift wraps to relays
+      // Publish each gift wrap to the recipient's inbox relays
       try {
-        const results = await Promise.allSettled(
-          giftWraps.map(giftWrap => nostr.event(giftWrap))
-        );
+        // Fetch all inbox relays in parallel first
+        const inboxRelayPromises = giftWraps.map(async (giftWrap) => {
+          const recipientPubkey = giftWrap.tags.find(tag => tag[0] === 'p')?.[1];
+          if (!recipientPubkey) {
+            throw new Error('Gift wrap missing recipient pubkey');
+          }
+          const inboxRelays = await getInboxRelaysForPubkey(recipientPubkey);
+          return { giftWrap, inboxRelays };
+        });
+
+        const giftWrapWithRelays = await Promise.all(inboxRelayPromises);
+
+        // Now publish all in parallel
+        const publishPromises = giftWrapWithRelays.map(({ giftWrap, inboxRelays }) => {
+          const relayGroup = nostr.group(inboxRelays);
+          return relayGroup.event(giftWrap);
+        });
+
+        const results = await Promise.allSettled(publishPromises);
 
         // Check for failures and log detailed errors
         const failures = results.filter(r => r.status === 'rejected');
@@ -608,8 +701,10 @@ export function DMProvider({ children, config }: DMProviderProps) {
     let processedMessages = 0;
     let currentSince = sinceTimestamp || 0;
 
-
     setScanProgress(prev => ({ ...prev, nip4: { current: 0, status: SCAN_STATUS_MESSAGES.NIP4_STARTING } }));
+
+    // Use user's inbox relays (read relays) for receiving DMs
+    const relayGroup = nostr.group(userInboxRelays);
 
     while (processedMessages < DM_CONSTANTS.SCAN_TOTAL_LIMIT) {
       const batchLimit = Math.min(DM_CONSTANTS.SCAN_BATCH_SIZE, DM_CONSTANTS.SCAN_TOTAL_LIMIT - processedMessages);
@@ -620,8 +715,11 @@ export function DMProvider({ children, config }: DMProviderProps) {
       ];
 
       try {
-        const batchDMs = await nostr.query(filters, { signal: AbortSignal.timeout(DM_CONSTANTS.NIP4_QUERY_TIMEOUT) });
+        const batchDMs = await relayGroup.query(filters, { signal: AbortSignal.timeout(DM_CONSTANTS.NIP4_QUERY_TIMEOUT) });
         const validBatchDMs = batchDMs.filter(validateDMEvent);
+
+        // Clear relay error on successful query
+        setRelayError(null);
 
         if (validBatchDMs.length === 0) break;
 
@@ -651,13 +749,30 @@ export function DMProvider({ children, config }: DMProviderProps) {
         if (validBatchDMs.length < batchLimit * 2) break;
       } catch (error) {
         console.error('[DM] NIP-4 Error in batch query:', error);
-        break;
+        setScanProgress(prev => ({ ...prev, nip4: null }));
+        
+        // Set relay error state with specific relay URLs
+        setRelayError({
+          timestamp: Date.now(),
+          message: 'Failed to load messages from your inbox relays. Check your relay configuration.',
+          protocol: MESSAGE_PROTOCOL.NIP04,
+          failedRelays: userInboxRelays,
+          totalRelays: userInboxRelays.length
+        });
+        
+        // Also show toast for immediate feedback
+        toast({
+          title: 'Failed to load messages',
+          description: `Failed to query ${userInboxRelays.length} inbox relay${userInboxRelays.length > 1 ? 's' : ''}. Check your relay configuration in settings.`,
+          variant: 'destructive',
+        });
+        throw new Error('Failed to query inbox relays - check your NIP-65 relay configuration');
       }
     }
 
     setScanProgress(prev => ({ ...prev, nip4: null }));
     return allMessages;
-  }, [user, nostr]);
+  }, [user, nostr, userInboxRelays, toast]);
 
   // Load past NIP-17 messages
   const loadPastNIP17Messages = useCallback(async (sinceTimestamp?: number) => {
@@ -672,8 +787,10 @@ export function DMProvider({ children, config }: DMProviderProps) {
     const TWO_DAYS_IN_SECONDS = 2 * 24 * 60 * 60;
     let currentSince = sinceTimestamp ? sinceTimestamp - TWO_DAYS_IN_SECONDS : 0;
 
-
     setScanProgress(prev => ({ ...prev, nip17: { current: 0, status: SCAN_STATUS_MESSAGES.NIP17_STARTING } }));
+
+    // Use user's inbox relays (read relays) for receiving DMs
+    const relayGroup = nostr.group(userInboxRelays);
 
     while (processedMessages < DM_CONSTANTS.SCAN_TOTAL_LIMIT) {
       const batchLimit = Math.min(DM_CONSTANTS.SCAN_BATCH_SIZE, DM_CONSTANTS.SCAN_TOTAL_LIMIT - processedMessages);
@@ -683,7 +800,10 @@ export function DMProvider({ children, config }: DMProviderProps) {
       ];
 
       try {
-        const batchEvents = await nostr.query(filters, { signal: AbortSignal.timeout(DM_CONSTANTS.NIP17_QUERY_TIMEOUT) });
+        const batchEvents = await relayGroup.query(filters, { signal: AbortSignal.timeout(DM_CONSTANTS.NIP17_QUERY_TIMEOUT) });
+
+        // Clear relay error on successful query
+        setRelayError(null);
 
         if (batchEvents.length === 0) break;
 
@@ -706,13 +826,30 @@ export function DMProvider({ children, config }: DMProviderProps) {
         if (batchEvents.length < batchLimit) break;
       } catch (error) {
         console.error('[DM] NIP-17 Error in batch query:', error);
-        break;
+        setScanProgress(prev => ({ ...prev, nip17: null }));
+        
+        // Set relay error state with specific relay URLs
+        setRelayError({
+          timestamp: Date.now(),
+          message: 'Failed to load messages from your inbox relays. Check your relay configuration.',
+          protocol: MESSAGE_PROTOCOL.NIP17,
+          failedRelays: userInboxRelays,
+          totalRelays: userInboxRelays.length
+        });
+        
+        // Also show toast for immediate feedback
+        toast({
+          title: 'Failed to load messages',
+          description: `Failed to query ${userInboxRelays.length} inbox relay${userInboxRelays.length > 1 ? 's' : ''}. Check your relay configuration in settings.`,
+          variant: 'destructive',
+        });
+        throw new Error('Failed to query inbox relays - check your NIP-65 relay configuration');
       }
     }
 
     setScanProgress(prev => ({ ...prev, nip17: null }));
     return allNIP17Events;
-  }, [user, nostr]);
+  }, [user, nostr, userInboxRelays, toast]);
 
   // Query relays for messages
   const queryRelaysForMessagesSince = useCallback(async (protocol: MessageProtocol, sinceTimestamp?: number): Promise<MessageProcessingResult> => {
@@ -735,7 +872,7 @@ export function DMProvider({ children, config }: DMProviderProps) {
           const recipientPTag = message.tags?.find(([name]) => name === 'p')?.[1];
           const otherPubkey = isFromUser ? recipientPTag : message.pubkey;
 
-          if (!otherPubkey || otherPubkey === user?.pubkey) continue;
+          if (!otherPubkey) continue;
 
           const { decryptedContent, error } = await decryptNIP4Message(message, otherPubkey);
 
@@ -751,11 +888,15 @@ export function DMProvider({ children, config }: DMProviderProps) {
             decryptedMessage.clientFirstSeen = Date.now();
           }
 
-          if (!newState.has(otherPubkey)) {
-            newState.set(otherPubkey, createEmptyParticipant());
+          // Use consistent conversation ID format (same as NIP-17)
+          // For NIP-04, this is always a 1-on-1 conversation
+          const conversationId = createConversationId([userPubkey, otherPubkey]);
+
+          if (!newState.has(conversationId)) {
+            newState.set(conversationId, createEmptyParticipant());
           }
 
-          const participant = newState.get(otherPubkey)!;
+          const participant = newState.get(conversationId)!;
           participant.messages.push(decryptedMessage);
           participant.hasNIP4 = true;
         }
@@ -794,7 +935,7 @@ export function DMProvider({ children, config }: DMProviderProps) {
               continue;
             }
 
-            // Store the seal (kind 13) as-is + add decryptedEvent for inner message access
+            // Store the seal (kind 13) as-is + add decryptedEvent for inner message access + gift wrap for debugging
             const messageWithAnimation: DecryptedMessage = {
               ...sealEvent, // Seal fields (kind 13, seal pubkey, encrypted content, etc.)
               created_at: processedMessage.created_at, // Use real timestamp from inner message
@@ -804,6 +945,7 @@ export function DMProvider({ children, config }: DMProviderProps) {
               } as NostrEvent,
               decryptedContent: processedMessage.decryptedContent,
               originalGiftWrapId: giftWrap.id, // Store gift wrap ID for deduplication
+              originalGiftWrap: giftWrap, // Store full gift wrap for debugging
             };
 
           // Use real message timestamp for recency check
@@ -1023,7 +1165,7 @@ export function DMProvider({ children, config }: DMProviderProps) {
     const recipientPTag = event.tags?.find(([name]) => name === 'p')?.[1];
     const otherPubkey = isFromUser ? recipientPTag : event.pubkey;
 
-    if (!otherPubkey || otherPubkey === user.pubkey) return;
+    if (!otherPubkey) return;
 
     const { decryptedContent, error } = await decryptNIP4Message(event, otherPubkey);
 
@@ -1039,7 +1181,10 @@ export function DMProvider({ children, config }: DMProviderProps) {
       decryptedMessage.clientFirstSeen = Date.now();
     }
 
-    addMessageToState(decryptedMessage, otherPubkey, MESSAGE_PROTOCOL.NIP04, user.pubkey);
+    // Use consistent conversation ID format (same as NIP-17)
+    const conversationId = createConversationId([user.pubkey, otherPubkey]);
+
+    addMessageToState(decryptedMessage, conversationId, MESSAGE_PROTOCOL.NIP04, user.pubkey);
   }, [user, decryptNIP4Message, addMessageToState]);
 
   // Process NIP-17 Gift Wrap
@@ -1103,10 +1248,7 @@ export function DMProvider({ children, config }: DMProviderProps) {
         };
       }
 
-      // Determine conversation ID based on participants
-      // For NIP-17, the conversation is defined by the set of pubkeys in p tags
-      let conversationPartner: string;
-
+      // Determine conversation ID based on ALL participants (sender + recipients)
       // Get all p tags (recipients)
       const allRecipients = messageEvent.tags
         .filter(([name]) => name === 'p')
@@ -1125,18 +1267,12 @@ export function DMProvider({ children, config }: DMProviderProps) {
         };
       }
 
-      // For group chats (multiple p tags), create a group ID
-      if (allRecipients.length > 1) {
-        // Create sorted group ID for consistent identification
-        const sortedRecipients = [...allRecipients].sort();
-        conversationPartner = `group:${sortedRecipients.join(',')}`;
-      } else if (sealEvent.pubkey === user.pubkey) {
-        // Message sent by me - conversation partner is the recipient
-        conversationPartner = allRecipients[0];
-      } else {
-        // Message sent to me - conversation partner is the sender
-        conversationPartner = sealEvent.pubkey;
-      }
+      // Get the sender from the seal (the person who actually sent the message)
+      const sender = sealEvent.pubkey;
+
+      // Create conversation ID from all participants (sender + recipients)
+      const allParticipants = [sender, ...allRecipients];
+      const conversationPartner = createConversationId(allParticipants);
 
       return {
         processedMessage: {
@@ -1194,7 +1330,7 @@ export function DMProvider({ children, config }: DMProviderProps) {
         return;
       }
 
-      // Store the seal (kind 13) as-is + add decryptedEvent for inner message access
+      // Store the seal (kind 13) as-is + add decryptedEvent for inner message access + gift wrap for debugging
       const messageWithAnimation: DecryptedMessage = {
         ...sealEvent, // Seal fields (kind 13, seal pubkey, encrypted content, etc.)
         created_at: processedMessage.created_at, // Use real timestamp from inner message
@@ -1204,6 +1340,7 @@ export function DMProvider({ children, config }: DMProviderProps) {
         } as NostrEvent,
         decryptedContent: processedMessage.decryptedContent,
         originalGiftWrapId: event.id, // Store gift wrap ID for deduplication
+        originalGiftWrap: event, // Store full gift wrap for debugging
       };
 
       // Use real message timestamp for recency check
@@ -1241,7 +1378,9 @@ export function DMProvider({ children, config }: DMProviderProps) {
         { kinds: [4], authors: [user.pubkey], since: subscriptionSince }
       ];
 
-      const subscription = nostr.req(filters);
+      // Subscribe to user's inbox relays (read relays)
+      const relayGroup = nostr.group(userInboxRelays);
+      const subscription = relayGroup.req(filters);
       let isActive = true;
 
       (async () => {
@@ -1270,7 +1409,7 @@ export function DMProvider({ children, config }: DMProviderProps) {
       console.error('[DM] Failed to start NIP-4 subscription:', error);
       setSubscriptions(prev => ({ ...prev, isNIP4Connected: false }));
     }
-  }, [user, nostr, lastSync.nip4, processIncomingNIP4Message]);
+  }, [user, nostr, lastSync.nip4, processIncomingNIP4Message, userInboxRelays]);
 
   // Start NIP-17 subscription
   const startNIP17Subscription = useCallback(async (sinceTimestamp?: number) => {
@@ -1297,7 +1436,9 @@ export function DMProvider({ children, config }: DMProviderProps) {
         since: subscriptionSince,
       }];
 
-      const subscription = nostr.req(filters);
+      // Subscribe to user's inbox relays (read relays)
+      const relayGroup = nostr.group(userInboxRelays);
+      const subscription = relayGroup.req(filters);
       let isActive = true;
 
       (async () => {
@@ -1326,7 +1467,7 @@ export function DMProvider({ children, config }: DMProviderProps) {
       console.error('[DM] Failed to start NIP-17 subscription:', error);
       setSubscriptions(prev => ({ ...prev, isNIP17Connected: false }));
     }
-  }, [user, nostr, lastSync.nip17, enableNIP17, processIncomingNIP17Message]);
+  }, [user, nostr, lastSync.nip17, enableNIP17, processIncomingNIP17Message, userInboxRelays]);
 
   // Load all cached messages at once (both protocols)
   const loadAllCachedMessages = useCallback(async (): Promise<{ nip4Since?: number; nip17Since?: number }> => {
@@ -1377,11 +1518,14 @@ export function DMProvider({ children, config }: DMProviderProps) {
                 const decryptedEvent = JSON.parse(sealContent) as NostrEvent;
 
                 // Keep seal structure but add decryptedEvent for access to inner fields
+                // Also preserve originalGiftWrap if it was stored
+                const msgWithExtra = msg as NostrEvent & { originalGiftWrap?: NostrEvent };
                 return {
                   ...msg,
                   decryptedEvent,                         // Full inner event (kind 14/15)
                   decryptedContent: decryptedEvent.content, // Plaintext message
-                } as NostrEvent & { decryptedEvent?: NostrEvent; decryptedContent?: string; error?: string };
+                  ...(msgWithExtra.originalGiftWrap && { originalGiftWrap: msgWithExtra.originalGiftWrap }),
+                } as NostrEvent & { decryptedEvent?: NostrEvent; decryptedContent?: string; error?: string; originalGiftWrap?: NostrEvent };
               } catch {
                 error = 'Decryption failed';
               }
@@ -1543,16 +1687,22 @@ export function DMProvider({ children, config }: DMProviderProps) {
     };
   }, [enabled]);
 
-  // Detect relay changes and reload messages
+  // Detect NIP-65 changes and reload messages (track by event ID)
   useEffect(() => {
-    const relayChanged = previousRelayUrl.current !== appConfig.relayUrl;
+    const currentDMEventId = relayLists?.dmInbox?.eventId;
+    const currentNIP65EventId = relayLists?.nip65?.eventId;
+    
+    const dmRelaysChanged = previousDMEventId.current !== undefined && previousDMEventId.current !== currentDMEventId;
+    const nip65RelaysChanged = previousNIP65EventId.current !== undefined && previousNIP65EventId.current !== currentNIP65EventId;
+    
+    previousDMEventId.current = currentDMEventId;
+    previousNIP65EventId.current = currentNIP65EventId;
 
-    previousRelayUrl.current = appConfig.relayUrl;
-
-    if (relayChanged && enabled && userPubkey && hasInitialLoadCompleted) {
+    if ((dmRelaysChanged || nip65RelaysChanged) && enabled && userPubkey && hasInitialLoadCompleted) {
+      console.log('[DM] Relay list changed (new event ID), clearing cache and refetching');
       clearCacheAndRefetch();
     }
-  }, [enabled, userPubkey, appConfig.relayUrl, hasInitialLoadCompleted, clearCacheAndRefetch]);
+  }, [enabled, userPubkey, relayLists?.dmInbox?.eventId, relayLists?.nip65?.eventId, hasInitialLoadCompleted, clearCacheAndRefetch]);
 
   // Detect hard refresh shortcut (Ctrl+Shift+R / Cmd+Shift+R) to clear cache
   useEffect(() => {
@@ -1617,6 +1767,37 @@ export function DMProvider({ children, config }: DMProviderProps) {
     return conversationsList.sort((a, b) => b.lastActivity - a.lastActivity);
   }, [messages, user?.pubkey]);
 
+  // Pre-fetch relay lists for all conversation participants
+  // This populates React Query cache so sending messages has no delay
+  useEffect(() => {
+    if (!enabled || conversations.length === 0 || !userPubkey) return;
+
+    const fetchRelayLists = async () => {
+      // Extract unique participant pubkeys from all conversations
+      const pubkeys: string[] = [];
+      conversations.forEach(conv => {
+        const participants = parseConversationId(conv.id);
+        pubkeys.push(...participants);
+      });
+      const uniquePubkeys = Array.from(new Set(pubkeys)).filter(p => p !== userPubkey);
+
+      if (uniquePubkeys.length === 0) return;
+
+      // Bulk fetch all relay lists in ONE query (much more efficient)
+      // Returns Map<pubkey, RelayListResult> with both 10050 and 10002
+      const relayLists = await fetchRelayListsBulk(nostr, appConfig.discoveryRelays, uniquePubkeys);
+
+      // Cache each result in React Query (same format as useRelayLists)
+      relayLists.forEach((relayListResult, pubkey) => {
+        queryClient.setQueryData(['nostr', 'relay-list', pubkey], relayListResult);
+      });
+
+      console.debug(`[DM] Pre-fetched ${relayLists.size}/${uniquePubkeys.length} relay lists`);
+    };
+
+    fetchRelayLists();
+  }, [enabled, conversations, nostr, appConfig.discoveryRelays, queryClient, userPubkey]);
+
   // Write to store
   const writeAllMessagesToStore = useCallback(async () => {
     if (!userPubkey) return;
@@ -1642,7 +1823,7 @@ export function DMProvider({ children, config }: DMProviderProps) {
           messages: participant.messages.map(msg => ({
             // Store messages in their ORIGINAL ENCRYPTED form
             // Just strip the decrypted fields (decryptedContent, decryptedEvent)
-            // Keep originalGiftWrapId for NIP-17 deduplication on cache load
+            // Keep originalGiftWrapId and originalGiftWrap for NIP-17 debugging
             id: msg.id,
             pubkey: msg.pubkey,
             content: msg.content, // Encrypted content (NIP-04 or seal)
@@ -1651,6 +1832,7 @@ export function DMProvider({ children, config }: DMProviderProps) {
             tags: msg.tags,
             sig: msg.sig,
             ...(msg.originalGiftWrapId && { originalGiftWrapId: msg.originalGiftWrapId }),
+            ...(msg.originalGiftWrap && { originalGiftWrap: msg.originalGiftWrap }),
           } as NostrEvent)),
           lastActivity: participant.lastActivity,
           hasNIP4: participant.hasNIP4,
@@ -1705,21 +1887,27 @@ export function DMProvider({ children, config }: DMProviderProps) {
     const { recipientPubkey, content, protocol = MESSAGE_PROTOCOL.NIP04, attachments } = params;
     if (!userPubkey) return;
 
-    // Parse group ID if needed (format: "group:pubkey1,pubkey2,pubkey3")
+    // Parse recipients and create conversation ID
     let recipients: string[];
-    let conversationId: string;
 
     if (typeof recipientPubkey === 'string' && recipientPubkey.startsWith('group:')) {
-      // Extract pubkeys from group ID
-      recipients = recipientPubkey.substring(6).split(',');
-      conversationId = recipientPubkey;
+      // Extract pubkeys from group ID (which includes sender)
+      const allParticipants = parseConversationId(recipientPubkey);
+      // Recipients are everyone except the sender
+      recipients = allParticipants.filter(p => p !== userPubkey);
+      
+      // For self-messaging, ensure we include ourselves as the recipient
+      if (recipients.length === 0 && allParticipants.length === 1) {
+        recipients = [userPubkey];
+      }
     } else if (Array.isArray(recipientPubkey)) {
       recipients = recipientPubkey;
-      conversationId = recipients.length === 1 ? recipients[0] : `group:${[...recipients].sort().join(',')}`;
     } else {
       recipients = [recipientPubkey];
-      conversationId = recipientPubkey;
     }
+
+    // Create conversation ID from all participants (including current user)
+    const conversationId = createConversationId([userPubkey, ...recipients]);
 
     console.log('[DM] Sending message:', {
       recipients,
@@ -1759,6 +1947,80 @@ export function DMProvider({ children, config }: DMProviderProps) {
 
   const isDoingInitialLoad = isLoading && (loadingPhase === LOADING_PHASES.CACHE || loadingPhase === LOADING_PHASES.RELAYS);
 
+  // Get all relay info for a conversation, grouped by relay
+  // This is reactive - when cache updates, result updates
+  const getConversationRelays = useCallback((conversationId: string): ConversationRelayInfo[] => {
+    const participants = parseConversationId(conversationId);
+    const relayMap = new Map<string, Array<{ pubkey: string; isCurrentUser: boolean; source: string }>>();
+
+    // Normalize relay URL by removing trailing slash
+    const normalizeRelay = (relay: string) => relay.endsWith('/') ? relay.slice(0, -1) : relay;
+
+    // Add current user's relays
+    userInboxRelays.forEach(relay => {
+      const normalizedRelay = normalizeRelay(relay);
+      if (!relayMap.has(normalizedRelay)) {
+        relayMap.set(normalizedRelay, []);
+      }
+      const source = relayLists?.dmInbox 
+        ? 'Kind 10050 (DM Inbox)' 
+        : relayLists?.nip65 
+        ? 'Kind 10002 (NIP-65)' 
+        : 'Discovery relays';
+      
+      relayMap.get(normalizedRelay)!.push({
+        pubkey: userPubkey || '',
+        isCurrentUser: true,
+        source,
+      });
+    });
+
+    // Add other participants' relays
+    participants
+      .filter(pk => pk !== userPubkey)
+      .forEach(pubkey => {
+        const cached = queryClient.getQueryData<RelayListResult>(['nostr', 'relay-list', pubkey]);
+        
+        // If not cached, add a placeholder that will be reactive
+        if (!cached) {
+          const loadingRelay = '(loading relay info...)';
+          if (!relayMap.has(loadingRelay)) {
+            relayMap.set(loadingRelay, []);
+          }
+          relayMap.get(loadingRelay)!.push({
+            pubkey,
+            isCurrentUser: false,
+            source: 'Loading...',
+          });
+          return;
+        }
+
+        const relays = extractInboxRelays(cached, appConfig.discoveryRelays);
+        const source = cached.dmInbox 
+          ? 'Kind 10050 (DM Inbox)' 
+          : cached.nip65 
+          ? 'Kind 10002 (NIP-65)' 
+          : 'Discovery relays';
+
+        relays.forEach(relay => {
+          const normalizedRelay = normalizeRelay(relay);
+          if (!relayMap.has(normalizedRelay)) {
+            relayMap.set(normalizedRelay, []);
+          }
+          relayMap.get(normalizedRelay)!.push({
+            pubkey,
+            isCurrentUser: false,
+            source,
+          });
+        });
+      });
+
+    return Array.from(relayMap.entries()).map(([relay, users]) => ({
+      relay,
+      users,
+    }));
+  }, [userInboxRelays, relayLists, userPubkey, queryClient, appConfig.discoveryRelays]);
+
   const contextValue: DMContextType = {
     messages,
     isLoading,
@@ -1771,6 +2033,11 @@ export function DMProvider({ children, config }: DMProviderProps) {
     scanProgress,
     subscriptions,
     clearCacheAndRefetch,
+    relayError,
+    clearRelayError,
+    userInboxRelays,
+    myRelayLists: relayLists,
+    getConversationRelays,
   };
 
   return (

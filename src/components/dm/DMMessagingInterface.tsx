@@ -10,31 +10,31 @@ interface DMMessagingInterfaceProps {
 }
 
 export const DMMessagingInterface = ({ className, onStatusClick }: DMMessagingInterfaceProps) => {
-  const [selectedPubkey, setSelectedPubkey] = useState<string | null>(null);
+  const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const isMobile = useIsMobile();
 
   // On mobile, show only one panel at a time
-  const showConversationList = !isMobile || !selectedPubkey;
-  const showChatArea = !isMobile || selectedPubkey;
+  const showConversationList = !isMobile || !selectedConversationId;
+  const showChatArea = !isMobile || selectedConversationId;
 
-  const handleSelectConversation = useCallback((pubkey: string) => {
-    setSelectedPubkey(pubkey);
+  const handleSelectConversation = useCallback((conversationId: string) => {
+    setSelectedConversationId(conversationId);
   }, []);
 
   const handleBack = useCallback(() => {
-    setSelectedPubkey(null);
+    setSelectedConversationId(null);
   }, []);
 
   return (
-    <div className={cn("flex gap-4 overflow-hidden h-full", className)}>
+    <div className={cn("flex overflow-hidden h-full", className)}>
       {/* Conversation List - Left Sidebar */}
       <div className={cn(
-        "md:w-80 md:flex-shrink-0",
+        "md:w-[360px] md:flex-shrink-0",
         isMobile && !showConversationList && "hidden",
         isMobile && showConversationList && "w-full"
       )}>
         <DMConversationList
-          selectedPubkey={selectedPubkey}
+          selectedPubkey={selectedConversationId}
           onSelectConversation={handleSelectConversation}
           className="h-full"
           onStatusClick={onStatusClick}
@@ -48,7 +48,7 @@ export const DMMessagingInterface = ({ className, onStatusClick }: DMMessagingIn
         isMobile && showChatArea && "w-full"
       )}>
         <DMChatArea
-          pubkey={selectedPubkey}
+          conversationId={selectedConversationId}
           onBack={isMobile ? handleBack : undefined}
           className="h-full"
         />

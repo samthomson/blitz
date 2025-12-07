@@ -3,7 +3,7 @@ import { type NostrEvent } from '@nostrify/nostrify';
 import { Link } from 'react-router-dom';
 import { nip19 } from 'nostr-tools';
 import { useAuthor } from '@/hooks/useAuthor';
-import { genUserName } from '@/lib/genUserName';
+import { getDisplayName } from '@/lib/genUserName';
 import { cn } from '@/lib/utils';
 
 interface NoteContentProps {
@@ -38,18 +38,39 @@ export function NoteContent({
       }
       
       if (url) {
-        // Handle URLs
-        parts.push(
-          <a 
-            key={`url-${keyCounter++}`}
-            href={url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-blue-500 hover:underline"
-          >
-            {url}
-          </a>
-        );
+        // Check if URL is an image
+        const isImage = /\.(jpg|jpeg|png|gif|webp|bmp|svg)(\?.*)?$/i.test(url);
+        
+        if (isImage) {
+          parts.push(
+            <a 
+              key={`img-${keyCounter++}`}
+              href={url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="block my-2"
+            >
+              <img 
+                src={url}
+                alt="Attached image"
+                className="max-w-full rounded-md"
+                style={{ maxHeight: '400px' }}
+              />
+            </a>
+          );
+        } else {
+          parts.push(
+            <a 
+              key={`url-${keyCounter++}`}
+              href={url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-500 hover:underline"
+            >
+              {url}
+            </a>
+          );
+        }
       } else if (nostrPrefix && nostrData) {
         // Handle Nostr references
         try {
@@ -118,8 +139,9 @@ export function NoteContent({
 function NostrMention({ pubkey }: { pubkey: string }) {
   const author = useAuthor(pubkey);
   const npub = nip19.npubEncode(pubkey);
-  const hasRealName = !!author.data?.metadata?.name;
-  const displayName = author.data?.metadata?.name ?? genUserName(pubkey);
+  const metadata = author.data?.metadata;
+  const hasRealName = !!(metadata?.display_name || metadata?.name);
+  const displayName = getDisplayName(pubkey, metadata);
 
   return (
     <Link 

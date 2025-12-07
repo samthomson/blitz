@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
@@ -15,32 +15,42 @@ import {
   FormMessage,
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { Switch } from '@/components/ui/switch';
-import { Loader2, Upload } from 'lucide-react';
+import { Loader2, Upload, Copy, Check } from 'lucide-react';
 import { NSchema as n, type NostrMetadata } from '@nostrify/nostrify';
 import { useQueryClient } from '@tanstack/react-query';
 import { useUploadFile } from '@/hooks/useUploadFile';
+import { nip19 } from 'nostr-tools';
+import { useState } from 'react';
 
 export const EditProfileForm: React.FC = () => {
   const queryClient = useQueryClient();
+  const [copied, setCopied] = useState(false);
 
   const { user, metadata } = useCurrentUser();
   const { mutateAsync: publishEvent, isPending } = useNostrPublish();
   const { mutateAsync: uploadFile, isPending: isUploading } = useUploadFile();
   const { toast } = useToast();
 
+  const npub = user?.pubkey ? nip19.npubEncode(user.pubkey) : '';
+
+  const copyNpub = async () => {
+    if (npub) {
+      await navigator.clipboard.writeText(npub);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+      toast({
+        title: 'Copied!',
+        description: 'Your npub has been copied to clipboard',
+      });
+    }
+  };
+
   // Initialize the form with default values
   const form = useForm<NostrMetadata>({
     resolver: zodResolver(n.metadata()),
     defaultValues: {
-      name: '',
-      about: '',
+      display_name: '',
       picture: '',
-      banner: '',
-      website: '',
-      nip05: '',
-      bot: false,
     },
   });
 
@@ -48,32 +58,27 @@ export const EditProfileForm: React.FC = () => {
   useEffect(() => {
     if (metadata) {
       form.reset({
-        name: metadata.name || '',
-        about: metadata.about || '',
+        display_name: metadata.display_name || metadata.name || '',
         picture: metadata.picture || '',
-        banner: metadata.banner || '',
-        website: metadata.website || '',
-        nip05: metadata.nip05 || '',
-        bot: metadata.bot || false,
       });
     }
   }, [metadata, form]);
 
-  // Handle file uploads for profile picture and banner
-  const uploadPicture = async (file: File, field: 'picture' | 'banner') => {
+  // Handle file uploads for profile picture
+  const uploadPicture = async (file: File) => {
     try {
       // The first tuple in the array contains the URL
       const [[_, url]] = await uploadFile(file);
-      form.setValue(field, url);
+      form.setValue('picture', url);
       toast({
         title: 'Success',
-        description: `${field === 'picture' ? 'Profile picture' : 'Banner'} uploaded successfully`,
+        description: 'Profile picture uploaded successfully',
       });
     } catch (error) {
-      console.error(`Failed to upload ${field}:`, error);
+      console.error('Failed to upload picture:', error);
       toast({
         title: 'Error',
-        description: `Failed to upload ${field === 'picture' ? 'profile picture' : 'banner'}. Please try again.`,
+        description: 'Failed to upload profile picture. Please try again.',
         variant: 'destructive',
       });
     }
@@ -127,9 +132,32 @@ export const EditProfileForm: React.FC = () => {
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+        {/* Npub Display */}
+        <div className="rounded-lg border bg-muted/50 p-4">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-medium text-muted-foreground mb-1">Your Public Key (npub)</p>
+              <p className="text-sm font-mono truncate">{npub}</p>
+            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              onClick={copyNpub}
+              className="flex-shrink-0"
+            >
+              {copied ? (
+                <Check className="h-4 w-4 text-green-500" />
+              ) : (
+                <Copy className="h-4 w-4" />
+              )}
+            </Button>
+          </div>
+        </div>
+
         <FormField
           control={form.control}
-          name="name"
+          name="display_name"
           render={({ field }) => (
             <FormItem>
               <FormLabel>Name</FormLabel>
@@ -146,111 +174,15 @@ export const EditProfileForm: React.FC = () => {
 
         <FormField
           control={form.control}
-          name="about"
+          name="picture"
           render={({ field }) => (
-            <FormItem>
-              <FormLabel>Bio</FormLabel>
-              <FormControl>
-                <Textarea 
-                  placeholder="Tell others about yourself" 
-                  className="resize-none" 
-                  {...field} 
-                />
-              </FormControl>
-              <FormDescription>
-                A short description about yourself.
-              </FormDescription>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <FormField
-            control={form.control}
-            name="picture"
-            render={({ field }) => (
-              <ImageUploadField
-                field={field}
-                label="Profile Picture"
-                placeholder="https://example.com/profile.jpg"
-                description="URL to your profile picture. You can upload an image or provide a URL."
-                previewType="square"
-                onUpload={(file) => uploadPicture(file, 'picture')}
-              />
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="banner"
-            render={({ field }) => (
-              <ImageUploadField
-                field={field}
-                label="Banner Image"
-                placeholder="https://example.com/banner.jpg"
-                description="URL to a wide banner image for your profile. You can upload an image or provide a URL."
-                previewType="wide"
-                onUpload={(file) => uploadPicture(file, 'banner')}
-              />
-            )}
-          />
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <FormField
-            control={form.control}
-            name="website"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Website</FormLabel>
-                <FormControl>
-                  <Input placeholder="https://yourwebsite.com" {...field} />
-                </FormControl>
-                <FormDescription>
-                  Your personal website or social media link.
-                </FormDescription>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="nip05"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>NIP-05 Identifier</FormLabel>
-                <FormControl>
-                  <Input placeholder="you@example.com" {...field} />
-                </FormControl>
-                <FormDescription>
-                  Your verified Nostr identifier.
-                </FormDescription>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        </div>
-
-        <FormField
-          control={form.control}
-          name="bot"
-          render={({ field }) => (
-            <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
-              <div className="space-y-0.5">
-                <FormLabel className="text-base">Bot Account</FormLabel>
-                <FormDescription>
-                  Mark this account as automated or a bot.
-                </FormDescription>
-              </div>
-              <FormControl>
-                <Switch
-                  checked={field.value}
-                  onCheckedChange={field.onChange}
-                />
-              </FormControl>
-            </FormItem>
+            <ImageUploadField
+              field={field}
+              label="Profile Picture"
+              placeholder="https://example.com/profile.jpg"
+              description="URL to your profile picture. You can upload an image or provide a URL."
+              onUpload={uploadPicture}
+            />
           )}
         />
 
@@ -280,7 +212,6 @@ interface ImageUploadFieldProps {
   label: string;
   placeholder: string;
   description: string;
-  previewType: 'square' | 'wide';
   onUpload: (file: File) => void;
 }
 
@@ -289,7 +220,6 @@ const ImageUploadField: React.FC<ImageUploadFieldProps> = ({
   label,
   placeholder,
   description,
-  previewType,
   onUpload,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -330,7 +260,7 @@ const ImageUploadField: React.FC<ImageUploadFieldProps> = ({
             Upload Image
           </Button>
           {field.value && (
-            <div className={`h-10 ${previewType === 'square' ? 'w-10' : 'w-24'} rounded overflow-hidden`}>
+            <div className="h-10 w-10 rounded overflow-hidden">
               <img 
                 src={field.value} 
                 alt={`${label} preview`} 

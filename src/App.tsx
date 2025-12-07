@@ -1,7 +1,9 @@
 // NOTE: This file should normally not be modified unless you are adding a new provider.
 // To add new routes, edit the AppRouter.tsx file.
 
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient } from "@tanstack/react-query";
+import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
+import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persister';
 import { createHead, UnheadProvider } from '@unhead/react/client';
 import { InferSeoMetaPlugin } from '@unhead/addons';
 import { Suspense } from 'react';
@@ -32,17 +34,25 @@ const queryClient = new QueryClient({
   },
 });
 
-const defaultConfig: AppConfig = {
-  theme: "dark",
-  relayUrl: "wss://relay.ditto.pub",
+const persistOptions = {
+  persister: createAsyncStoragePersister({
+    storage: window.localStorage,
+    key: 'doduo:cache',
+  }),
+  maxAge: Infinity, // Profile metadata rarely changes, cache indefinitely
 };
 
-const presetRelays = [
-  { url: 'wss://relay.ditto.pub', name: 'Ditto' },
-  { url: 'wss://relay.nostr.band', name: 'Nostr.Band' },
-  { url: 'wss://relay.damus.io', name: 'Damus' },
-  { url: 'wss://relay.primal.net', name: 'Primal' },
-];
+const defaultConfig: AppConfig = {
+  theme: "dark",
+  discoveryRelays: [
+    'wss://relay.ditto.pub',
+    'wss://relay.damus.io',
+    'wss://relay.nostr.band',
+    'wss://relay.primal.net',
+    'wss://nos.lol',
+  ],
+  renderInlineMedia: true,
+};
 
 const dmConfig: DMConfig = {
   // Enable or disable DMs entirely
@@ -58,8 +68,8 @@ const dmConfig: DMConfig = {
 export function App() {
   return (
     <UnheadProvider head={head}>
-      <AppProvider storageKey="nostr:app-config" defaultConfig={defaultConfig} presetRelays={presetRelays}>
-        <QueryClientProvider client={queryClient}>
+      <AppProvider storageKey="nostr:app-config" defaultConfig={defaultConfig}>
+        <PersistQueryClientProvider client={queryClient} persistOptions={persistOptions}>
           <NostrLoginProvider storageKey='nostr:login'>
             <NostrProvider>
               <NWCProvider>
@@ -74,7 +84,7 @@ export function App() {
               </NWCProvider>
             </NostrProvider>
           </NostrLoginProvider>
-        </QueryClientProvider>
+        </PersistQueryClientProvider>
       </AppProvider>
     </UnheadProvider>
   );

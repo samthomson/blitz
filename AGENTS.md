@@ -497,18 +497,26 @@ To display profile data for a user by their Nostr pubkey (such as an event autho
 ```tsx
 import type { NostrEvent, NostrMetadata } from '@nostrify/nostrify';
 import { useAuthor } from '@/hooks/useAuthor';
-import { genUserName } from '@/lib/genUserName';
+import { getDisplayName } from '@/lib/genUserName';
 
 function Post({ event }: { event: NostrEvent }) {
   const author = useAuthor(event.pubkey);
   const metadata: NostrMetadata | undefined = author.data?.metadata;
 
-  const displayName = metadata?.name ?? genUserName(event.pubkey);
+  // getDisplayName checks: display_name > name > truncated npub
+  const displayName = getDisplayName(event.pubkey, metadata);
   const profileImage = metadata?.picture;
 
   // ...render elements with this data
 }
 ```
+
+**IMPORTANT**: Always use `getDisplayName(pubkey, metadata)` to display user names. This function:
+1. First checks `metadata?.display_name` (richer display name)
+2. Then checks `metadata?.name` (basic name)
+3. Falls back to truncated npub format: `npub1u36g...8761`
+
+**Never** manually construct display names with `metadata?.name ?? genUserName()` or similar patterns. Use `getDisplayName()` everywhere for consistency.
 
 ### `NostrMetadata` type
 
@@ -1081,26 +1089,30 @@ describe('MyComponent', () => {
 });
 ```
 
-## Validating Your Changes
+## AI Assistant Guidelines
 
-**CRITICAL**: After making any code changes, you must validate your work by running available validation tools.
+### Git Workflow
+- **NEVER attempt to create git commits** - The user controls all commits themselves
+- You do not have permission to use git commit commands
+- Focus on making code changes, the user will handle version control
 
-**Your task is not considered finished until the code successfully type-checks and builds without errors.**
+### Build and Validation Strategy
+- **Do NOT run builds after every change** - This is pointless and wastes time
+- Only run a build if there's an error that makes it seem necessary
+- Use linting tools (`read_lints`) to catch errors without full builds
+- Type checking happens automatically through linting
 
-### Validation Priority Order
+### Validation Priority
 
-Run available tools in this priority order:
+When you make changes:
 
-1. **Type Checking** (Required): Ensure TypeScript compilation succeeds
-2. **Building/Compilation** (Required): Verify the project builds successfully
-3. **Linting** (Recommended): Check code style and catch potential issues
-4. **Tests** (If Available): Run existing test suite
-5. **Git Commit** (Required): Create a commit with your changes when finished
+1. **Linting** (When appropriate): Use `read_lints` on files you've edited to catch issues
+2. **Builds** (Only when necessary): Only run builds if there are errors suggesting compilation issues
+3. **Tests** (Only when appropriate): Don't run tests after every change unless you have good reason to
 
 **Minimum Requirements:**
-- Code must type-check without errors
-- Code must build/compile successfully
+- Code should be syntactically correct
 - Fix any critical linting errors that would break functionality
-- Create a git commit when your changes are complete
+- Let the user handle builds, tests, and commits
 
-The validation ensures code quality and catches errors before deployment, regardless of the development environment.
+The goal is to make changes efficiently without unnecessary validation steps.

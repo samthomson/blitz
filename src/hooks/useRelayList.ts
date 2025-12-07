@@ -1,0 +1,181 @@
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useNostr } from '@nostrify/react';
+import { useCurrentUser } from './useCurrentUser';
+import { useAppContext } from './useAppContext';
+import { useToast } from './useToast';
+
+export interface RelayEntry {
+  url: string;
+  read: boolean;
+  write: boolean;
+}
+
+export interface RelayListResult {
+  nip65?: { relays: RelayEntry[]; eventId: string };
+  dmInbox?: { relays: string[]; eventId: string };
+}
+
+export function useRelayLists() {
+  const { nostr } = useNostr();
+  const { user } = useCurrentUser();
+  const { config } = useAppContext();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const query = useQuery({
+    queryKey: ['nostr', 'relay-list', user?.pubkey],
+    queryFn: async (c) => {
+      if (!user?.pubkey) return null;
+
+      console.log('[useRelayLists] Querying relay lists from discovery relays:', config.discoveryRelays);
+
+      const signal = AbortSignal.any([c.signal, AbortSignal.timeout(10000)]);
+      const relayGroup = nostr.group(config.discoveryRelays);
+      
+      const events = await relayGroup.query(
+        [{ kinds: [10002, 10050], authors: [user.pubkey] }],
+        { signal }
+      );
+
+      console.log('[useRelayLists] Query returned', events.length, 'events:', events.map(e => ({ kind: e.kind, id: e.id.substring(0, 8), tagCount: e.tags.length })));
+
+      const result: RelayListResult = {};
+
+      // Select latest 10002 and 10050 events by created_at
+      let latestNip65: (typeof events)[number] | undefined;
+      let latestDm: (typeof events)[number] | undefined;
+
+      for (const event of events) {
+        if (event.kind === 10002) {
+          if (!latestNip65 || event.created_at > latestNip65.created_at) {
+            latestNip65 = event;
+          }
+        } else if (event.kind === 10050) {
+          if (!latestDm || event.created_at > latestDm.created_at) {
+            latestDm = event;
+          }
+        }
+      }
+
+      if (latestNip65) {
+        const relays: RelayEntry[] = [];
+        for (const tag of latestNip65.tags) {
+          if (tag[0] !== 'r') continue;
+          const url = tag[1];
+          const marker = tag[2];
+          if (!url) continue;
+
+          switch (marker) {
+            case 'read':
+              relays.push({ url, read: true, write: false });
+              break;
+            case 'write':
+              relays.push({ url, read: false, write: true });
+              break;
+            default:
+              relays.push({ url, read: true, write: true });
+          }
+        }
+        result.nip65 = { relays, eventId: latestNip65.id };
+        console.log('[useRelayLists] Parsed latest kind 10002 with', relays.length, 'relays');
+      } else {
+        console.log('[useRelayLists] No kind 10002 event found');
+      }
+      
+      if (latestDm) {
+        const relays = latestDm.tags
+          .filter(tag => tag[0] === 'relay')
+          .map(tag => tag[1])
+          .filter(Boolean);
+        result.dmInbox = { relays, eventId: latestDm.id };
+        console.log('[useRelayLists] Parsed latest kind 10050 with', relays.length, 'relays');
+      } else {
+        console.log('[useRelayLists] No kind 10050 event found');
+      }
+
+      console.log('[useRelayLists] Final result:', result);
+      return Object.keys(result).length > 0 ? result : null;
+    },
+    enabled: !!user?.pubkey,
+    staleTime: 30 * 60 * 1000,
+    retry: 2,
+  });
+
+  const publishNIP65 = useMutation({
+    mutationFn: async (relays: RelayEntry[]) => {
+      if (!user?.signer) throw new Error('No signer available');
+
+      const validRelays = relays.filter(r => r.read || r.write);
+
+      const tags = validRelays.flatMap(r => {
+        if (r.read && r.write) return [['r', r.url]];
+        if (r.read) return [['r', r.url, 'read']];
+        if (r.write) return [['r', r.url, 'write']];
+        return [];
+      });
+
+      const event = await user.signer.signEvent({
+        kind: 10002,
+        content: '',
+        tags,
+        created_at: Math.floor(Date.now() / 1000),
+      });
+
+      await nostr.event(event, { signal: AbortSignal.timeout(5000) });
+      return event;
+    },
+    onSuccess: () => {
+      if (user?.pubkey) {
+        queryClient.invalidateQueries({ queryKey: ['nostr', 'relay-list', user.pubkey] });
+      }
+      toast({ title: 'Relay list updated', description: 'Your relay preferences have been saved.' });
+    },
+    onError: (error) => {
+      toast({
+        title: 'Failed to update relay list',
+        description: error instanceof Error ? error.message : 'Unknown error',
+        variant: 'destructive',
+      });
+    },
+  });
+
+  const publishDMInbox = useMutation({
+    mutationFn: async (relays: string[]) => {
+      if (!user?.signer) throw new Error('No signer available');
+
+      const tags = relays.map(url => ['relay', url]);
+
+      const event = await user.signer.signEvent({
+        kind: 10050,
+        content: '',
+        tags,
+        created_at: Math.floor(Date.now() / 1000),
+      });
+
+      await nostr.event(event, { signal: AbortSignal.timeout(5000) });
+      return event;
+    },
+    onSuccess: () => {
+      if (user?.pubkey) {
+        queryClient.invalidateQueries({ queryKey: ['nostr', 'relay-list', user.pubkey] });
+      }
+      toast({ title: 'DM inbox relays updated', description: 'Your DM inbox preferences have been saved.' });
+    },
+    onError: (error) => {
+      toast({
+        title: 'Failed to update DM inbox relays',
+        description: error instanceof Error ? error.message : 'Unknown error',
+        variant: 'destructive',
+      });
+    },
+  });
+
+  return {
+    ...query,
+    publishNIP65: publishNIP65.mutate,
+    publishDMInbox: publishDMInbox.mutate,
+    isPublishingNIP65: publishNIP65.isPending,
+    isPublishingDM: publishDMInbox.isPending,
+  };
+}
+

@@ -1,22 +1,23 @@
-import { useMemo, useState, memo } from 'react';
+import { useMemo, useState, memo, useEffect, useRef } from 'react';
 import { Info, Loader2 } from 'lucide-react';
 import { useDMContext } from '@/contexts/DMContext';
+import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useAuthor } from '@/hooks/useAuthor';
-import { genUserName } from '@/lib/genUserName';
-import { formatConversationTime, formatFullDateTime } from '@/lib/dmUtils';
+import { getDisplayName } from '@/lib/genUserName';
+import { formatConversationTime, formatFullDateTime, parseConversationId, getPubkeyColor } from '@/lib/dmUtils';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import { LOADING_PHASES } from '@/lib/dmConstants';
 import { NewConversationDialog } from '@/components/NewConversationDialog';
+import { APP_NAME, APP_DESCRIPTION } from '@/lib/constants';
 
 interface DMConversationListProps {
   selectedPubkey: string | null;
-  onSelectConversation: (pubkey: string) => void;
+  onSelectConversation: (conversationId: string) => void;
   className?: string;
   onStatusClick?: () => void;
 }
@@ -30,7 +31,7 @@ interface ConversationItemProps {
   hasNIP4Messages: boolean;
 }
 
-const GroupAvatar = ({ pubkeys }: { pubkeys: string[] }) => {
+const GroupAvatar = ({ pubkeys, isSelected }: { pubkeys: string[]; isSelected: boolean }) => {
   const author1 = useAuthor(pubkeys[0] || '');
   const author2 = useAuthor(pubkeys[1] || '');
   const author3 = useAuthor(pubkeys[2] || '');
@@ -40,14 +41,15 @@ const GroupAvatar = ({ pubkeys }: { pubkeys: string[] }) => {
 
   if (pubkeys.length === 1) {
     const metadata = author1.data?.metadata;
-    const displayName = metadata?.name || genUserName(pubkeys[0]);
+    const displayName = getDisplayName(pubkeys[0], metadata);
     const avatarUrl = metadata?.picture;
     const initials = displayName.slice(0, 2).toUpperCase();
+    const bgColor = getPubkeyColor(pubkeys[0]);
 
     return (
-      <Avatar className="h-10 w-10 flex-shrink-0">
+      <Avatar className={cn("h-10 w-10 flex-shrink-0 transition-opacity", !isSelected && "opacity-40")}>
         <AvatarImage src={avatarUrl} alt={displayName} />
-        <AvatarFallback>{initials}</AvatarFallback>
+        <AvatarFallback className="text-white" style={{ backgroundColor: bgColor }}>{initials}</AvatarFallback>
       </Avatar>
     );
   }
@@ -55,11 +57,12 @@ const GroupAvatar = ({ pubkeys }: { pubkeys: string[] }) => {
   // For 2 people: split circle vertically
   if (pubkeys.length === 2) {
     return (
-      <div className="relative h-10 w-10 rounded-full overflow-hidden flex-shrink-0">
+      <div className={cn("relative h-10 w-10 rounded-full overflow-hidden flex-shrink-0 transition-opacity", !isSelected && "opacity-40")}>
         {pubkeys.slice(0, 2).map((pubkey, index) => {
           const author = authors[index];
           const metadata = author?.data?.metadata;
           const avatarUrl = metadata?.picture;
+          const bgColor = getPubkeyColor(pubkey);
 
           return (
             <div
@@ -70,7 +73,7 @@ const GroupAvatar = ({ pubkeys }: { pubkeys: string[] }) => {
               {avatarUrl ? (
                 <img src={avatarUrl} alt="" className="h-full w-full object-cover" />
               ) : (
-                <div className="h-full w-full bg-muted" />
+                <div className="h-full w-full" style={{ backgroundColor: bgColor }} />
               )}
             </div>
           );
@@ -81,11 +84,12 @@ const GroupAvatar = ({ pubkeys }: { pubkeys: string[] }) => {
 
   // For 3+ people: split into 4 quarters
   return (
-    <div className="relative h-10 w-10 rounded-full overflow-hidden flex-shrink-0">
+    <div className={cn("relative h-10 w-10 rounded-full overflow-hidden flex-shrink-0 transition-opacity", !isSelected && "opacity-40")}>
       {pubkeys.slice(0, 4).map((pubkey, index) => {
         const author = authors[index];
         const metadata = author?.data?.metadata;
         const avatarUrl = metadata?.picture;
+        const bgColor = getPubkeyColor(pubkey);
 
         const positions = [
           { top: 0, left: 0 }, // top-left
@@ -103,7 +107,7 @@ const GroupAvatar = ({ pubkeys }: { pubkeys: string[] }) => {
             {avatarUrl ? (
               <img src={avatarUrl} alt="" className="h-full w-full object-cover" />
             ) : (
-              <div className="h-full w-full bg-muted" />
+              <div className="h-full w-full" style={{ backgroundColor: bgColor }} />
             )}
           </div>
         );
@@ -119,41 +123,52 @@ const ConversationItemComponent = ({
   lastMessage,
   lastActivity,
 }: ConversationItemProps) => {
-  // Check if this is a group
-  const isGroup = pubkey.startsWith('group:');
-  const pubkeys = isGroup ? pubkey.substring(6).split(',') : [pubkey];
+  const { user } = useCurrentUser();
+  
+  // Parse conversation participants and exclude current user from display
+  const allParticipants = parseConversationId(pubkey);
+  const conversationParticipants = allParticipants.filter(pk => pk !== user?.pubkey);
 
-  // For individual chats
-  const author = useAuthor(pubkeys[0]);
-  const metadata = author.data?.metadata;
+  // Check if this is a self-messaging conversation
+  const isSelfMessaging = conversationParticipants.length === 0;
 
-  // For group chats, get first 2 names
-  const author2 = useAuthor(pubkeys[1] || '');
+  // Fetch profile data for participants (used in display name logic)
+  const displayPubkey = isSelfMessaging ? user?.pubkey : conversationParticipants[0];
+  const firstParticipant = useAuthor(displayPubkey || '');
+  const secondParticipant = useAuthor(conversationParticipants[1] || '');
+  
+  const firstMetadata = firstParticipant.data?.metadata;
 
-  const getDisplayName = () => {
-    if (!isGroup) {
-      return metadata?.name || genUserName(pubkeys[0]);
+  const conversationDisplayName = (() => {
+    // Self-messaging conversation
+    if (isSelfMessaging) {
+      const selfName = getDisplayName(user?.pubkey || '', firstMetadata);
+      return `${selfName} (You)`;
     }
 
-    const name1 = metadata?.name || genUserName(pubkeys[0]);
-    const name2 = author2.data?.metadata?.name || genUserName(pubkeys[1]);
+    // If only one other person, show their name (1-on-1)
+    if (conversationParticipants.length === 1) {
+      return getDisplayName(conversationParticipants[0], firstMetadata);
+    }
 
-    if (pubkeys.length === 2) {
-      return `${name1}, ${name2}`;
+    // Multiple people - show first 2 names + remaining count
+    const firstName = getDisplayName(conversationParticipants[0], firstMetadata);
+    const secondName = getDisplayName(conversationParticipants[1], secondParticipant.data?.metadata);
+
+    if (conversationParticipants.length === 2) {
+      return `${firstName}, ${secondName}`;
     } else {
-      const remaining = pubkeys.length - 2;
-      return `${name1}, ${name2}, +${remaining}`;
+      const remaining = conversationParticipants.length - 2;
+      return `${firstName}, ${secondName}, +${remaining}`;
     }
-  };
-
-  const displayName = getDisplayName();
+  })();
 
   const lastMessagePreview = lastMessage?.error
     ? '🔒 Encrypted message'
     : lastMessage?.decryptedContent || 'No messages yet';
 
   // Show skeleton only for name/avatar while loading (we already have message data)
-  const isLoadingProfile = !isGroup && author.isLoading && !metadata;
+  const isLoadingProfile = !isSelfMessaging && conversationParticipants.length === 1 && firstParticipant.isLoading && !firstMetadata;
 
   return (
     <button
@@ -167,7 +182,7 @@ const ConversationItemComponent = ({
         {isLoadingProfile ? (
           <Skeleton className="h-10 w-10 rounded-full flex-shrink-0" />
         ) : (
-          <GroupAvatar pubkeys={pubkeys} />
+          <GroupAvatar pubkeys={isSelfMessaging ? [user!.pubkey] : conversationParticipants} isSelected={isSelected} />
         )}
 
         <div className="flex-1 min-w-0">
@@ -176,7 +191,7 @@ const ConversationItemComponent = ({
               {isLoadingProfile ? (
                 <Skeleton className="h-[1.25rem] w-24" />
               ) : (
-                <span className="font-medium text-sm truncate">{displayName}</span>
+                <span className="font-medium text-sm truncate">{conversationDisplayName}</span>
               )}
             </div>
             <TooltipProvider>
@@ -232,6 +247,7 @@ export const DMConversationList = ({
 }: DMConversationListProps) => {
   const { conversations, isLoading, loadingPhase } = useDMContext();
   const [activeTab, setActiveTab] = useState<'known' | 'requests'>('known');
+  const prevWasRequestRef = useRef<Set<string>>(new Set());
 
   // Filter conversations by type
   const { knownConversations, requestConversations } = useMemo(() => {
@@ -241,6 +257,22 @@ export const DMConversationList = ({
     };
   }, [conversations]);
 
+  // Auto-switch to "known" tab when a request conversation becomes known
+  useEffect(() => {
+    if (!selectedPubkey) return;
+    
+    const selectedConversation = conversations.find(c => c.pubkey === selectedPubkey);
+    if (!selectedConversation) return;
+    
+    // If this was a request but is now known, switch to known tab
+    if (selectedConversation.isKnown && prevWasRequestRef.current.has(selectedPubkey)) {
+      setActiveTab('known');
+      prevWasRequestRef.current.delete(selectedPubkey);
+    } else if (selectedConversation.isRequest) {
+      prevWasRequestRef.current.add(selectedPubkey);
+    }
+  }, [selectedPubkey, conversations]);
+
   // Get the current list based on active tab
   const currentConversations = activeTab === 'known' ? knownConversations : requestConversations;
 
@@ -248,72 +280,85 @@ export const DMConversationList = ({
   const isInitialLoad = (loadingPhase === LOADING_PHASES.CACHE || loadingPhase === LOADING_PHASES.RELAYS) && conversations.length === 0;
 
   return (
-    <Card className={cn("h-full flex flex-col overflow-hidden", className)}>
+    <div className={cn("h-full flex flex-col overflow-hidden border-r border-border bg-card", className)}>
       {/* Header - always visible */}
-      <div className="p-4 border-b flex-shrink-0 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <h2 className="font-semibold text-lg">Messages</h2>
-          {(loadingPhase === LOADING_PHASES.CACHE ||
-            loadingPhase === LOADING_PHASES.RELAYS ||
-            loadingPhase === LOADING_PHASES.SUBSCRIPTIONS) && (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="flex items-center">
-                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p className="text-xs">
-                    {loadingPhase === LOADING_PHASES.CACHE && 'Loading from cache...'}
-                    {loadingPhase === LOADING_PHASES.RELAYS && 'Querying relays for new messages...'}
-                    {loadingPhase === LOADING_PHASES.SUBSCRIPTIONS && 'Setting up subscriptions...'}
-                  </p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          )}
-        </div>
-        <div className="flex items-center gap-1">
-          <NewConversationDialog onStartConversation={onSelectConversation} />
-          {onStatusClick && (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8"
-              onClick={onStatusClick}
-              aria-label="View messaging status"
-            >
-              <Info className="h-4 w-4" />
-            </Button>
-          )}
+      <div className="px-4 py-4 border-b flex-shrink-0">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="flex flex-col justify-center min-h-[32px]">
+              <h1 className="text-lg font-bold bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent leading-none">
+                {APP_NAME}
+              </h1>
+              <p className="text-[10px] text-muted-foreground leading-tight mt-0.5">{APP_DESCRIPTION}</p>
+            </div>
+            {(loadingPhase === LOADING_PHASES.CACHE ||
+              loadingPhase === LOADING_PHASES.RELAYS ||
+              loadingPhase === LOADING_PHASES.SUBSCRIPTIONS) && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="flex items-center pt-1">
+                      <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p className="text-xs">
+                      {loadingPhase === LOADING_PHASES.CACHE && 'Loading from cache...'}
+                      {loadingPhase === LOADING_PHASES.RELAYS && 'Querying relays for new messages...'}
+                      {loadingPhase === LOADING_PHASES.SUBSCRIPTIONS && 'Setting up subscriptions...'}
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
+          </div>
+          <div className="flex items-center gap-1">
+            <NewConversationDialog onStartConversation={onSelectConversation} />
+            {onStatusClick && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                onClick={onStatusClick}
+                aria-label="View messaging status"
+              >
+                <Info className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
         </div>
       </div>
 
       {/* Tab buttons - always visible */}
-      <div className="px-2 pt-2 flex-shrink-0">
-        <div className="grid grid-cols-2 gap-1 bg-muted p-1 rounded-lg">
+      <div className="px-4 flex-shrink-0 border-b border-border">
+        <div className="flex gap-6">
           <button
             onClick={() => setActiveTab('known')}
             className={cn(
-              "text-xs py-2 px-3 rounded-md transition-colors",
+              "text-sm py-3 font-medium transition-colors relative",
               activeTab === 'known'
-                ? "bg-background shadow-sm font-medium"
+                ? "text-foreground"
                 : "text-muted-foreground hover:text-foreground"
             )}
           >
             Active {knownConversations.length > 0 && `(${knownConversations.length})`}
+            {activeTab === 'known' && (
+              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
+            )}
           </button>
           <button
             onClick={() => setActiveTab('requests')}
             className={cn(
-              "text-xs py-2 px-3 rounded-md transition-colors",
+              "text-sm py-3 font-medium transition-colors relative",
               activeTab === 'requests'
-                ? "bg-background shadow-sm font-medium"
+                ? "text-foreground"
                 : "text-muted-foreground hover:text-foreground"
             )}
           >
             Requests {requestConversations.length > 0 && `(${requestConversations.length})`}
+            {activeTab === 'requests' && (
+              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
+            )}
           </button>
         </div>
       </div>
@@ -351,6 +396,6 @@ export const DMConversationList = ({
           </ScrollArea>
         )}
       </div>
-    </Card>
+    </div>
   );
 };

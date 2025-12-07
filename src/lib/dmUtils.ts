@@ -96,3 +96,97 @@ export function formatFullDateTime(timestamp: number): string {
     minute: '2-digit'
   });
 }
+
+/**
+ * Create a conversation ID from all participants.
+ * 
+ * Always returns "group:sorted,pubkey,list" format for consistency.
+ * This makes 1-on-1 and group chats use the same format, enables self-messaging,
+ * and ensures both parties see the exact same conversation ID.
+ * 
+ * Examples:
+ * - Self: "group:alice"
+ * - 1-on-1: "group:alice,bob" (both Alice and Bob see this same ID)
+ * - Group: "group:alice,bob,charlie"
+ * 
+ * @param allParticipants - All participant pubkeys including current user
+ * @returns Conversation ID in "group:..." format
+ */
+export function createConversationId(allParticipants: string[]): string {
+  const uniqueSorted = [...new Set(allParticipants)].sort();
+  return `group:${uniqueSorted.join(',')}`;
+}
+
+/**
+ * Parse a conversation ID to get all participant pubkeys.
+ * 
+ * Handles both formats for backwards compatibility:
+ * - New: "group:alice,bob" 
+ * - Old: "bob" (bare pubkey from before this refactor)
+ * 
+ * @param conversationId - Either "group:pubkey1,pubkey2" or bare pubkey (legacy)
+ * @returns Array of participant pubkeys
+ */
+export function parseConversationId(conversationId: string): string[] {
+  if (conversationId.startsWith('group:')) {
+    return conversationId.substring(6).split(',');
+  }
+  // Legacy format: bare pubkey (treat as 1-on-1)
+  return [conversationId];
+}
+
+/**
+ * Generate a consistent color for a pubkey (used for avatars and names).
+ * Returns a hex color string that can be used as inline styles.
+ * 
+ * @param pubkey - The user's public key
+ * @returns Hex color string (e.g., '#dc2626')
+ */
+export function getPubkeyColor(pubkey: string): string {
+  const colors = [
+    '#dc2626', // red
+    '#ea580c', // orange
+    '#d97706', // amber
+    '#ca8a04', // yellow
+    '#65a30d', // lime
+    '#16a34a', // green
+    '#059669', // emerald
+    '#0d9488', // teal
+    '#0891b2', // cyan
+    '#0284c7', // sky
+    '#2563eb', // blue
+    '#4f46e5', // indigo
+    '#7c3aed', // violet
+    '#9333ea', // purple
+    '#c026d3', // fuchsia
+    '#db2777', // pink
+    '#e11d48', // rose
+  ];
+  
+  // Hash pubkey to get consistent color index
+  let hash = 0;
+  for (let i = 0; i < pubkey.length; i++) {
+    hash = ((hash << 5) - hash) + pubkey.charCodeAt(i);
+    hash = hash & hash;
+  }
+  
+  return colors[Math.abs(hash) % colors.length];
+}
+
+/**
+ * Check if a conversation represents a multi-person group (3+ participants).
+ * 
+ * Note: With the new format, all conversations use "group:..." format,
+ * but this function specifically checks for 3+ people (actual group chats).
+ * 
+ * - Self-messaging: "group:alice" → false (1 person)
+ * - 1-on-1: "group:alice,bob" → false (2 people)
+ * - Group: "group:alice,bob,charlie" → true (3+ people)
+ * 
+ * @param conversationId - Conversation ID to check
+ * @returns true if 3+ participants (actual group chat)
+ */
+export function isGroupConversation(conversationId: string): boolean {
+  const participants = parseConversationId(conversationId);
+  return participants.length >= 3;
+}

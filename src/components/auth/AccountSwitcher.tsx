@@ -10,10 +10,9 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu.tsx';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar.tsx';
-import { RelaySelector } from '@/components/RelaySelector';
 import { WalletModal } from '@/components/WalletModal';
-import { useLoggedInAccounts, type Account } from '@/hooks/useLoggedInAccounts';
-import { genUserName } from '@/lib/genUserName';
+import { useLoggedInAccounts } from '@/hooks/useLoggedInAccounts';
+import { getDisplayName } from '@/lib/genUserName';
 
 interface AccountSwitcherProps {
   onAddAccountClick: () => void;
@@ -24,28 +23,21 @@ export function AccountSwitcher({ onAddAccountClick }: AccountSwitcherProps) {
 
   if (!currentUser) return null;
 
-  const getDisplayName = (account: Account): string => {
-    return account.metadata.name ?? genUserName(account.pubkey);
-  }
-
   return (
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
         <button className='flex items-center gap-3 p-3 rounded-full hover:bg-accent transition-all w-full text-foreground'>
           <Avatar className='w-10 h-10'>
-            <AvatarImage src={currentUser.metadata.picture} alt={getDisplayName(currentUser)} />
-            <AvatarFallback>{getDisplayName(currentUser).charAt(0)}</AvatarFallback>
+            <AvatarImage src={currentUser.metadata.picture} alt={getDisplayName(currentUser.pubkey, currentUser.metadata)} />
+            <AvatarFallback>{getDisplayName(currentUser.pubkey, currentUser.metadata).charAt(0)}</AvatarFallback>
           </Avatar>
           <div className='flex-1 text-left hidden md:block truncate'>
-            <p className='font-medium text-sm truncate'>{getDisplayName(currentUser)}</p>
+            <p className='font-medium text-sm truncate'>{getDisplayName(currentUser.pubkey, currentUser.metadata)}</p>
           </div>
           <ChevronDown className='w-4 h-4 text-muted-foreground' />
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent className='w-56 p-2 animate-scale-in'>
-        <div className='font-medium text-sm px-2 py-1.5'>Switch Relay</div>
-        <RelaySelector className="w-full" />
-        <DropdownMenuSeparator />
         <div className='font-medium text-sm px-2 py-1.5'>Switch Account</div>
         {otherUsers.map((user) => (
           <DropdownMenuItem
@@ -54,11 +46,11 @@ export function AccountSwitcher({ onAddAccountClick }: AccountSwitcherProps) {
             className='flex items-center gap-2 cursor-pointer p-2 rounded-md'
           >
             <Avatar className='w-8 h-8'>
-              <AvatarImage src={user.metadata.picture} alt={getDisplayName(user)} />
-              <AvatarFallback>{getDisplayName(user)?.charAt(0) || <UserIcon />}</AvatarFallback>
+              <AvatarImage src={user.metadata.picture} alt={getDisplayName(user.pubkey, user.metadata)} />
+              <AvatarFallback>{getDisplayName(user.pubkey, user.metadata)?.charAt(0) || <UserIcon />}</AvatarFallback>
             </Avatar>
             <div className='flex-1 truncate'>
-              <p className='text-sm font-medium'>{getDisplayName(user)}</p>
+              <p className='text-sm font-medium'>{getDisplayName(user.pubkey, user.metadata)}</p>
             </div>
             {user.id === currentUser.id && <div className='w-2 h-2 rounded-full bg-primary'></div>}
           </DropdownMenuItem>
