@@ -60,3 +60,9 @@ export interface CachedData {
   relayInfo: Record<string, RelayInfo>;
 }
 
+export interface RelayListsResult {
+  kind10002: NostrEvent | null;
+  kind10050: NostrEvent | null;
+  kind10006: NostrEvent | null;
+}
+
