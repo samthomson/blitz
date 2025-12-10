@@ -1,8 +1,16 @@
 import type { NostrEvent } from '@nostrify/nostrify';
 
+export const RELAY_MODE = {
+  DISCOVERY: 'discovery',
+  HYBRID: 'hybrid',
+  STRICT_OUTBOX: 'strict_outbox',
+} as const;
+
+export type RelayMode = typeof RELAY_MODE[keyof typeof RELAY_MODE];
+
 export interface DMSettings {
   discoveryRelays: string[];
-  relayMode: 'discovery' | 'hybrid' | 'strict_outbox';
+  relayMode: RelayMode;
   relayTTL: number;
   queryLimit: number;
 }
