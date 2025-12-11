@@ -1,6 +1,6 @@
 /* eslint-disable */
 // @ts-nocheck
-import { createContext, useContext, ReactNode, useState, useEffect, useRef } from 'react';
+import { createContext, useContext, ReactNode, useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useNostr } from '@nostrify/react';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useAppContext } from '@/hooks/useAppContext';
@@ -14,6 +14,8 @@ import type {
   RelayMode,
   RelayListsResult,
 } from '@/lib/dmTypes';
+
+const MESSAGES_PER_PAGE = 25;
 
 interface Signer {
   nip44?: {
@@ -201,4 +203,35 @@ export const useNewDMContext = (): NewDMContextValue => {
     throw new Error('useNewDMContext must be used within a NewDMProvider');
   }
   return context;
+}
+
+export function useConversationMessages(conversationId: string) {
+  const { messagingState } = useNewDMContext();
+  const [visibleCount, setVisibleCount] = useState(MESSAGES_PER_PAGE);
+
+  const result = useMemo(() => {
+    const messages = messagingState?.messages[conversationId] || [];
+    const totalCount = messages.length;
+    const hasMore = totalCount > visibleCount;
+    const visibleMessages = messages.slice(-visibleCount);
+
+    return {
+      messages: visibleMessages,
+      hasMoreMessages: hasMore,
+      totalCount,
+    };
+  }, [messagingState?.messages[conversationId], visibleCount]);
+
+  const loadEarlierMessages = useCallback(() => {
+    setVisibleCount(prev => prev + MESSAGES_PER_PAGE);
+  }, []);
+
+  useEffect(() => {
+    setVisibleCount(MESSAGES_PER_PAGE);
+  }, [conversationId]);
+
+  return {
+    ...result,
+    loadEarlierMessages,
+  };
 }
