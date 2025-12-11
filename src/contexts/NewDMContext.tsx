@@ -6,7 +6,7 @@ import type {
   DMSettings,
   Participant,
   Message,
-  CachedData,
+  MessagingState,
   RelayMode,
   RelayListsResult,
 } from '@/lib/dmTypes';
@@ -62,7 +62,7 @@ const buildParticipantsMap = (
 const mergeParticipants = (existing: Record<string, Participant>, incoming: Record<string, Participant>): Record<string, Participant> => {}
 const computeSinceTimestamp = (lastCacheTime: number | null, nip17FuzzDays: number): number | null => {}
 const determineNewPubkeys = (foundPubkeys: string[], existingPubkeys: string[], mode: StartupMode): string[] => {}
-const buildCachedData = (participants: Record<string, Participant>, messages: Message[], queriedRelays: string[], queryLimitReached: boolean): CachedData => {}
+const buildCachedData = (participants: Record<string, Participant>, messages: Message[], queriedRelays: string[], queryLimitReached: boolean): MessagingState => {}
 const extractNewPubkeys = (messagesWithMetadata: MessageWithMetadata[], baseParticipants: Record<string, Participant>, myPubkey: string, mode: StartupMode): string[] => {}
 const findNewRelaysToQuery = (participants: Record<string, Participant>, alreadyQueried: string[]): string[] => {}
 const computeAllQueriedRelays = (mode: StartupMode, cached: CachedData | null, relaySet: string[], newRelays: string[]): string[] => {}
@@ -74,8 +74,8 @@ const computeAllQueriedRelays = (mode: StartupMode, cached: CachedData | null, r
 const fetchRelayLists = async (nostr: NPool, discoveryRelays: string[], pubkeys: string[]): Promise<Map<string, RelayListsResult>> => {}
 const fetchMessages = async (nostr: NPool, relays: string[], filters: Array<{ kinds: number[]; '#p'?: string[]; since?: number }>, queryLimit: number): Promise<{ messages: NostrEvent[]; limitReached: boolean }> => {}
 const unwrapAllGiftWraps = async (messages: NostrEvent[], signer: Signer): Promise<MessageWithMetadata[]> => {}
-const loadFromCache = async (myPubkey: string): Promise<CachedData | null> => {}
-const saveToCache = async (myPubkey: string, data: CachedData): Promise<void> => {}
+const loadFromCache = async (myPubkey: string): Promise<MessagingState | null> => {}
+const saveToCache = async (myPubkey: string, data: MessagingState): Promise<void> => {}
 const refreshStaleParticipants = async (
   nostr: NPool,
   participants: Record<string, Participant>,
@@ -95,13 +95,13 @@ const fetchAndMergeParticipants = async (
   discoveryRelays: string[]
 ): Promise<Record<string, Participant>> => {}
 const queryNewRelays = async (nostr: NPool, signer: Signer, relays: string[], myPubkey: string, queryLimit: number): Promise<{ allMessages: MessageWithMetadata[]; limitReached: boolean }> => {}
-const buildAndSaveCache = async (myPubkey: string, participants: Record<string, Participant>, allQueriedRelays: string[], limitReached: boolean): Promise<CachedData> => {}
+const buildAndSaveCache = async (myPubkey: string, participants: Record<string, Participant>, allQueriedRelays: string[], limitReached: boolean): Promise<MessagingState> => {}
 
 // ============================================================================
 // Orchestrators
 // ============================================================================
 
-const initialiseMessaging = async (nostr: NPool, signer: Signer, myPubkey: string, settings: DMSettings): Promise<CachedData> => {
+const initialiseMessaging = async (nostr: NPool, signer: Signer, myPubkey: string, settings: DMSettings): Promise<MessagingState> => {
   const cached = await loadFromCache(myPubkey);
   // todo: have a const define a ttl and compare it here
   const mode = cached && cached.syncState.lastCacheTime ? StartupMode.WARM : StartupMode.COLD;

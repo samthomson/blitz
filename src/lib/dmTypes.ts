@@ -52,7 +52,7 @@ export interface SyncState {
   queryLimitReached: boolean;
 }
 
-export interface CachedData {
+export interface MessagingState {
   participants: Record<string, Participant>;
   conversations: Record<string, Conversation>;
   messages: Record<string, Message[]>;
