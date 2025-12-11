@@ -1,7 +1,11 @@
 /* eslint-disable */
 // @ts-nocheck
-import { createContext, useContext, ReactNode } from 'react';
+import { createContext, useContext, ReactNode, useState, useEffect, useRef } from 'react';
+import { useNostr } from '@nostrify/react';
+import { useCurrentUser } from '@/hooks/useCurrentUser';
+import { useAppContext } from '@/hooks/useAppContext';
 import type { NostrEvent, NPool } from '@nostrify/nostrify';
+import { RELAY_MODE } from '@/lib/dmTypes';
 import type {
   DMSettings,
   Participant,
@@ -65,7 +69,7 @@ const determineNewPubkeys = (foundPubkeys: string[], existingPubkeys: string[], 
 const buildCachedData = (participants: Record<string, Participant>, messages: Message[], queriedRelays: string[], queryLimitReached: boolean): MessagingState => {}
 const extractNewPubkeys = (messagesWithMetadata: MessageWithMetadata[], baseParticipants: Record<string, Participant>, myPubkey: string, mode: StartupMode): string[] => {}
 const findNewRelaysToQuery = (participants: Record<string, Participant>, alreadyQueried: string[]): string[] => {}
-const computeAllQueriedRelays = (mode: StartupMode, cached: CachedData | null, relaySet: string[], newRelays: string[]): string[] => {}
+const computeAllQueriedRelays = (mode: StartupMode, cached: MessagingState | null, relaySet: string[], newRelays: string[]): string[] => {}
 
 // ============================================================================
 // Impure Functions
@@ -133,13 +137,57 @@ const initialiseMessaging = async (nostr: NPool, signer: Signer, myPubkey: strin
 // React Context
 // ============================================================================
 
+interface MessageState {
+  data: MessagingState | null;
+  isLoading: boolean;
+}
+
 type NewDMContextValue = object;
 
 const NewDMContext = createContext<NewDMContextValue | undefined>(undefined);
 
 export const NewDMProvider = ({ children }: { children: ReactNode }) => {
+  const { nostr } = useNostr();
+  const { user } = useCurrentUser();
+  const { config: appConfig } = useAppContext();
+  
+  const [messageState, setMessageState] = useState<MessageState>({
+    data: null,
+    isLoading: true,
+  });
+  
+  const initialisedForPubkey = useRef<string | null>(null);
+  
+  // do our intiial load (cold or warm) of messaging state
+  useEffect(() => {
+    if (!user) {
+      initialisedForPubkey.current = null;
+      setMessageState({ data: null, isLoading: true });
+      return;
+    }
+    
+    if (initialisedForPubkey.current === user.pubkey) return;
+    
+    initialisedForPubkey.current = user.pubkey;
+    setMessageState({ data: null, isLoading: true });
+    
+    (async () => {
+      const settings: DMSettings = {
+        discoveryRelays: appConfig.discoveryRelays,
+        relayMode: RELAY_MODE.HYBRID,
+        relayTTL: 7 * 24 * 60 * 60 * 1000,
+        queryLimit: 20000,
+      };
+      
+      const result = await initialiseMessaging(nostr, user.signer, user.pubkey, settings);
+      setMessageState({ data: result, isLoading: false });
+    })();
+  }, [user?.pubkey, nostr, appConfig.discoveryRelays]);
+  
+  const value: NewDMContextValue = {};
+  
   return (
-    <NewDMContext.Provider value={{}}>
+    <NewDMContext.Provider value={value}>
       {children}
     </NewDMContext.Provider>
   );
