@@ -137,12 +137,10 @@ const initialiseMessaging = async (nostr: NPool, signer: Signer, myPubkey: strin
 // React Context
 // ============================================================================
 
-interface MessageState {
-  data: MessagingState | null;
+interface NewDMContextValue {
+  messagingState: MessagingState | null;
   isLoading: boolean;
 }
-
-type NewDMContextValue = object;
 
 const NewDMContext = createContext<NewDMContextValue | undefined>(undefined);
 
@@ -151,10 +149,8 @@ export const NewDMProvider = ({ children }: { children: ReactNode }) => {
   const { user } = useCurrentUser();
   const { config: appConfig } = useAppContext();
   
-  const [messageState, setMessageState] = useState<MessageState>({
-    data: null,
-    isLoading: true,
-  });
+  const [messagingState, setMessagingState] = useState<MessagingState | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   
   const initialisedForPubkey = useRef<string | null>(null);
   
@@ -162,14 +158,16 @@ export const NewDMProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     if (!user) {
       initialisedForPubkey.current = null;
-      setMessageState({ data: null, isLoading: true });
+      setMessagingState(null);
+      setIsLoading(true);
       return;
     }
     
     if (initialisedForPubkey.current === user.pubkey) return;
     
     initialisedForPubkey.current = user.pubkey;
-    setMessageState({ data: null, isLoading: true });
+    setMessagingState(null);
+    setIsLoading(true);
     
     (async () => {
       const settings: DMSettings = {
@@ -180,11 +178,15 @@ export const NewDMProvider = ({ children }: { children: ReactNode }) => {
       };
       
       const result = await initialiseMessaging(nostr, user.signer, user.pubkey, settings);
-      setMessageState({ data: result, isLoading: false });
+      setMessagingState(result);
+      setIsLoading(false);
     })();
   }, [user?.pubkey, nostr, appConfig.discoveryRelays]);
   
-  const value: NewDMContextValue = {};
+  const value: NewDMContextValue = {
+    messagingState,
+    isLoading,
+  };
   
   return (
     <NewDMContext.Provider value={value}>
