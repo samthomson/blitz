@@ -11,6 +11,10 @@ import type {
   RelayListsResult,
 } from '@/lib/dmTypes';
 
+export const CACHE_DB_NAME = 'nostr-dm-cache-v2';
+export const CACHE_STORE_NAME = 'dm-cache';
+export const CACHE_KEY_PREFIX = 'dm-cache:';
+
 export interface Signer {
   nip44?: {
     encrypt(pubkey: string, plaintext: string): Promise<string>;
@@ -140,16 +144,16 @@ const fetchMessages = async (nostr: NPool, relays: string[], filters: Array<{ ki
 const unwrapAllGiftWraps = async (messages: NostrEvent[], signer: Signer): Promise<MessageWithMetadata[]> => { return []; }
 const loadFromCache = async (myPubkey: string): Promise<MessagingState | null> => {
   try {
-    const db = await openDB('nostr-dm-cache-v2', 1, {
+    const db = await openDB(CACHE_DB_NAME, 1, {
       upgrade(db) {
-        if (!db.objectStoreNames.contains('dm-cache')) {
-          db.createObjectStore('dm-cache');
+        if (!db.objectStoreNames.contains(CACHE_STORE_NAME)) {
+          db.createObjectStore(CACHE_STORE_NAME);
         }
       },
     });
     
-    const key = `dm-cache:${myPubkey}`;
-    const data = await db.get('dm-cache', key);
+    const key = `${CACHE_KEY_PREFIX}${myPubkey}`;
+    const data = await db.get(CACHE_STORE_NAME, key);
     
     if (!data) return null;
     
@@ -165,8 +169,24 @@ const loadFromCache = async (myPubkey: string): Promise<MessagingState | null> =
     return null;
   }
 }
-// TODO: Implement saveToCache
-const saveToCache = async (myPubkey: string, data: MessagingState): Promise<void> => { return; }
+const saveToCache = async (myPubkey: string, data: MessagingState): Promise<void> => {
+  try {
+    const db = await openDB(CACHE_DB_NAME, 1, {
+      upgrade(db) {
+        if (!db.objectStoreNames.contains(CACHE_STORE_NAME)) {
+          db.createObjectStore(CACHE_STORE_NAME);
+        }
+      },
+    });
+    
+    const key = `${CACHE_KEY_PREFIX}${myPubkey}`;
+    await db.put(CACHE_STORE_NAME, data, key);
+    db.close();
+  } catch (error) {
+    console.error('[DM Cache] Error saving to cache:', error);
+    throw error;
+  }
+}
 // TODO: Implement refreshStaleParticipants
 const refreshStaleParticipants = async (
   nostr: NPool,

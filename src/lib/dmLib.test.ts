@@ -3,6 +3,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { openDB } from 'idb';
 import * as DMLib from './dmLib';
+import { CACHE_DB_NAME, CACHE_STORE_NAME, CACHE_KEY_PREFIX } from './dmLib';
 import type { MessagingState } from './dmTypes';
 
 describe('DMLib', () => {
@@ -63,23 +64,21 @@ describe('DMLib', () => {
 
     describe('Cache', () => {
       const testPubkey = 'test-pubkey-123';
-      const dbName = 'nostr-dm-cache-v2';
-      const storeName = 'dm-cache';
 
       beforeEach(async () => {
-        const db = await openDB(dbName, 1, {
+        const db = await openDB(CACHE_DB_NAME, 1, {
           upgrade(db) {
-            if (!db.objectStoreNames.contains(storeName)) {
-              db.createObjectStore(storeName);
+            if (!db.objectStoreNames.contains(CACHE_STORE_NAME)) {
+              db.createObjectStore(CACHE_STORE_NAME);
             }
           },
         });
-        await db.clear(storeName);
+        await db.clear(CACHE_STORE_NAME);
       });
 
       afterEach(async () => {
-        const db = await openDB(dbName, 1);
-        await db.clear(storeName);
+        const db = await openDB(CACHE_DB_NAME, 1);
+        await db.clear(CACHE_STORE_NAME);
         db.close();
       });
 
@@ -97,8 +96,8 @@ describe('DMLib', () => {
           relayInfo: {}
         };
 
-        const db = await openDB(dbName, 1);
-        await db.put(storeName, validData, `dm-cache:${testPubkey}`);
+        const db = await openDB(CACHE_DB_NAME, 1);
+        await db.put(CACHE_STORE_NAME, validData, `${CACHE_KEY_PREFIX}${testPubkey}`);
         db.close();
 
         const result = await DMLib.Impure.Cache.loadFromCache(testPubkey);
@@ -113,8 +112,8 @@ describe('DMLib', () => {
           relayInfo: {}
         };
 
-        const db = await openDB(dbName, 1);
-        await db.put(storeName, invalidData, `dm-cache:${testPubkey}`);
+        const db = await openDB(CACHE_DB_NAME, 1);
+        await db.put(CACHE_STORE_NAME, invalidData, `${CACHE_KEY_PREFIX}${testPubkey}`);
         db.close();
 
         const result = await DMLib.Impure.Cache.loadFromCache(testPubkey);
@@ -129,8 +128,8 @@ describe('DMLib', () => {
           relayInfo: {}
         };
 
-        const db = await openDB(dbName, 1);
-        await db.put(storeName, invalidData, `dm-cache:${testPubkey}`);
+        const db = await openDB(CACHE_DB_NAME, 1);
+        await db.put(CACHE_STORE_NAME, invalidData, `${CACHE_KEY_PREFIX}${testPubkey}`);
         db.close();
 
         const result = await DMLib.Impure.Cache.loadFromCache(testPubkey);
@@ -145,8 +144,8 @@ describe('DMLib', () => {
           relayInfo: {}
         };
 
-        const db = await openDB(dbName, 1);
-        await db.put(storeName, invalidData, `dm-cache:${testPubkey}`);
+        const db = await openDB(CACHE_DB_NAME, 1);
+        await db.put(CACHE_STORE_NAME, invalidData, `${CACHE_KEY_PREFIX}${testPubkey}`);
         db.close();
 
         const result = await DMLib.Impure.Cache.loadFromCache(testPubkey);
@@ -161,8 +160,8 @@ describe('DMLib', () => {
           relayInfo: {}
         };
 
-        const db = await openDB(dbName, 1);
-        await db.put(storeName, invalidData, `dm-cache:${testPubkey}`);
+        const db = await openDB(CACHE_DB_NAME, 1);
+        await db.put(CACHE_STORE_NAME, invalidData, `${CACHE_KEY_PREFIX}${testPubkey}`);
         db.close();
 
         const result = await DMLib.Impure.Cache.loadFromCache(testPubkey);
@@ -177,15 +176,99 @@ describe('DMLib', () => {
           syncState: { lastCacheTime: 123456, queriedRelays: [], queryLimitReached: false }
         };
 
-        const db = await openDB(dbName, 1);
-        await db.put(storeName, invalidData, `dm-cache:${testPubkey}`);
+        const db = await openDB(CACHE_DB_NAME, 1);
+        await db.put(CACHE_STORE_NAME, invalidData, `${CACHE_KEY_PREFIX}${testPubkey}`);
         db.close();
 
         const result = await DMLib.Impure.Cache.loadFromCache(testPubkey);
         expect(result).toBeNull();
       });
 
-      it.todo('saveToCache');
+      it('should save MessagingState to IndexedDB', async () => {
+        const testData: MessagingState = {
+          participants: { 'pk1': { pubkey: 'pk1', derivedRelays: ['wss://relay1.com'], blockedRelays: [], lastFetched: 123 } },
+          conversations: { 'conv1': { id: 'conv1', participantPubkeys: ['pk1'], subject: '', lastActivity: 456, lastReadAt: 0, hasNIP04: true, hasNIP17: false, isKnown: true, isRequest: false, lastMessage: null, hasNIP4Messages: true } },
+          messages: { 'conv1': [{ id: 'msg1', event: { id: 'msg1', pubkey: 'pk1', created_at: 789, kind: 4, tags: [], content: 'encrypted', sig: 'sig1' }, conversationId: 'conv1', protocol: 'nip04' }] },
+          syncState: { lastCacheTime: 999, queriedRelays: ['wss://relay1.com'], queryLimitReached: false },
+          relayInfo: { 'wss://relay1.com': { lastQuerySucceeded: true, lastQueryError: null, isBlocked: false } }
+        };
+
+        await DMLib.Impure.Cache.saveToCache(testPubkey, testData);
+
+        const db = await openDB(CACHE_DB_NAME, 1);
+        const retrieved = await db.get(CACHE_STORE_NAME, `${CACHE_KEY_PREFIX}${testPubkey}`);
+        db.close();
+
+        expect(retrieved).toEqual(testData);
+      });
+
+      it('should allow data to be saved and loaded (round-trip)', async () => {
+        const testData: MessagingState = {
+          participants: { 'pk2': { pubkey: 'pk2', derivedRelays: [], blockedRelays: [], lastFetched: 0 } },
+          conversations: {},
+          messages: {},
+          syncState: { lastCacheTime: 111, queriedRelays: [], queryLimitReached: true },
+          relayInfo: {}
+        };
+
+        await DMLib.Impure.Cache.saveToCache(testPubkey, testData);
+        const loaded = await DMLib.Impure.Cache.loadFromCache(testPubkey);
+
+        expect(loaded).toEqual(testData);
+      });
+
+      it('should overwrite existing data for same pubkey', async () => {
+        const firstData: MessagingState = {
+          participants: {},
+          conversations: {},
+          messages: {},
+          syncState: { lastCacheTime: 111, queriedRelays: [], queryLimitReached: false },
+          relayInfo: {}
+        };
+
+        const secondData: MessagingState = {
+          participants: { 'new': { pubkey: 'new', derivedRelays: [], blockedRelays: [], lastFetched: 0 } },
+          conversations: {},
+          messages: {},
+          syncState: { lastCacheTime: 222, queriedRelays: [], queryLimitReached: true },
+          relayInfo: {}
+        };
+
+        await DMLib.Impure.Cache.saveToCache(testPubkey, firstData);
+        await DMLib.Impure.Cache.saveToCache(testPubkey, secondData);
+
+        const loaded = await DMLib.Impure.Cache.loadFromCache(testPubkey);
+        expect(loaded).toEqual(secondData);
+        expect(loaded?.syncState.lastCacheTime).toBe(222);
+      });
+
+      it('should store data for multiple pubkeys independently', async () => {
+        const pubkey1Data: MessagingState = {
+          participants: { 'pk1': { pubkey: 'pk1', derivedRelays: [], blockedRelays: [], lastFetched: 0 } },
+          conversations: {},
+          messages: {},
+          syncState: { lastCacheTime: 111, queriedRelays: [], queryLimitReached: false },
+          relayInfo: {}
+        };
+
+        const pubkey2Data: MessagingState = {
+          participants: { 'pk2': { pubkey: 'pk2', derivedRelays: [], blockedRelays: [], lastFetched: 0 } },
+          conversations: {},
+          messages: {},
+          syncState: { lastCacheTime: 222, queriedRelays: [], queryLimitReached: false },
+          relayInfo: {}
+        };
+
+        await DMLib.Impure.Cache.saveToCache('pubkey1', pubkey1Data);
+        await DMLib.Impure.Cache.saveToCache('pubkey2', pubkey2Data);
+
+        const loaded1 = await DMLib.Impure.Cache.loadFromCache('pubkey1');
+        const loaded2 = await DMLib.Impure.Cache.loadFromCache('pubkey2');
+
+        expect(loaded1).toEqual(pubkey1Data);
+        expect(loaded2).toEqual(pubkey2Data);
+      });
+
       it.todo('buildAndSaveCache');
     });
   });
