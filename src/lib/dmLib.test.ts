@@ -217,7 +217,172 @@ describe('DMLib', () => {
     describe('Participant', () => {
       it.todo('buildParticipant');
       it.todo('buildParticipantsMap');
-      it.todo('mergeParticipants');
+      
+      describe('mergeParticipants', () => {
+        it('should return empty object when both records are empty', () => {
+          const result = DMLib.Pure.Participant.mergeParticipants({}, {});
+          expect(result).toEqual({});
+        });
+
+        it('should return existing when incoming is empty', () => {
+          const existing = {
+            'pk1': { pubkey: 'pk1', derivedRelays: ['wss://relay1.com'], blockedRelays: [], lastFetched: 100 }
+          };
+          const result = DMLib.Pure.Participant.mergeParticipants(existing, {});
+          expect(result).toEqual(existing);
+        });
+
+        it('should return incoming when existing is empty', () => {
+          const incoming = {
+            'pk1': { pubkey: 'pk1', derivedRelays: ['wss://relay1.com'], blockedRelays: [], lastFetched: 100 }
+          };
+          const result = DMLib.Pure.Participant.mergeParticipants({}, incoming);
+          expect(result).toEqual(incoming);
+        });
+
+        it('should merge non-overlapping participants', () => {
+          const existing = {
+            'pk1': { pubkey: 'pk1', derivedRelays: ['wss://relay1.com'], blockedRelays: [], lastFetched: 100 }
+          };
+          const incoming = {
+            'pk2': { pubkey: 'pk2', derivedRelays: ['wss://relay2.com'], blockedRelays: [], lastFetched: 200 }
+          };
+          const result = DMLib.Pure.Participant.mergeParticipants(existing, incoming);
+          expect(result).toEqual({
+            'pk1': { pubkey: 'pk1', derivedRelays: ['wss://relay1.com'], blockedRelays: [], lastFetched: 100 },
+            'pk2': { pubkey: 'pk2', derivedRelays: ['wss://relay2.com'], blockedRelays: [], lastFetched: 200 }
+          });
+        });
+
+        it('should let incoming overwrite existing for same pubkey', () => {
+          const existing = {
+            'pk1': { pubkey: 'pk1', derivedRelays: ['wss://old-relay.com'], blockedRelays: [], lastFetched: 100 }
+          };
+          const incoming = {
+            'pk1': { pubkey: 'pk1', derivedRelays: ['wss://new-relay.com'], blockedRelays: ['wss://blocked.com'], lastFetched: 200 }
+          };
+          const result = DMLib.Pure.Participant.mergeParticipants(existing, incoming);
+          expect(result).toEqual({
+            'pk1': { pubkey: 'pk1', derivedRelays: ['wss://new-relay.com'], blockedRelays: ['wss://blocked.com'], lastFetched: 200 }
+          });
+        });
+
+        it('should handle multiple participants with some overlap', () => {
+          const existing = {
+            'pk1': { pubkey: 'pk1', derivedRelays: ['wss://relay1.com'], blockedRelays: [], lastFetched: 100 },
+            'pk2': { pubkey: 'pk2', derivedRelays: ['wss://relay2.com'], blockedRelays: [], lastFetched: 200 },
+            'pk3': { pubkey: 'pk3', derivedRelays: ['wss://relay3.com'], blockedRelays: [], lastFetched: 300 }
+          };
+          const incoming = {
+            'pk2': { pubkey: 'pk2', derivedRelays: ['wss://new-relay2.com'], blockedRelays: [], lastFetched: 250 },
+            'pk4': { pubkey: 'pk4', derivedRelays: ['wss://relay4.com'], blockedRelays: [], lastFetched: 400 }
+          };
+          const result = DMLib.Pure.Participant.mergeParticipants(existing, incoming);
+          expect(result).toEqual({
+            'pk1': { pubkey: 'pk1', derivedRelays: ['wss://relay1.com'], blockedRelays: [], lastFetched: 100 },
+            'pk2': { pubkey: 'pk2', derivedRelays: ['wss://new-relay2.com'], blockedRelays: [], lastFetched: 250 }, // updated
+            'pk3': { pubkey: 'pk3', derivedRelays: ['wss://relay3.com'], blockedRelays: [], lastFetched: 300 },
+            'pk4': { pubkey: 'pk4', derivedRelays: ['wss://relay4.com'], blockedRelays: [], lastFetched: 400 } // new
+          });
+        });
+
+        it('should completely replace participant data (not deep merge)', () => {
+          const existing = {
+            'pk1': { pubkey: 'pk1', derivedRelays: ['wss://relay1.com', 'wss://relay2.com'], blockedRelays: ['wss://blocked1.com'], lastFetched: 100 }
+          };
+          const incoming = {
+            'pk1': { pubkey: 'pk1', derivedRelays: ['wss://relay3.com'], blockedRelays: [], lastFetched: 200 }
+          };
+          const result = DMLib.Pure.Participant.mergeParticipants(existing, incoming);
+          // Should be completely replaced, not merged arrays
+          expect(result['pk1'].derivedRelays).toEqual(['wss://relay3.com']);
+          expect(result['pk1'].blockedRelays).toEqual([]);
+          expect(result['pk1'].lastFetched).toBe(200);
+        });
+
+        it('should not mutate existing record', () => {
+          const existing = {
+            'pk1': { pubkey: 'pk1', derivedRelays: ['wss://relay1.com'], blockedRelays: [], lastFetched: 100 }
+          };
+          const incoming = {
+            'pk2': { pubkey: 'pk2', derivedRelays: ['wss://relay2.com'], blockedRelays: [], lastFetched: 200 }
+          };
+          const originalExisting = JSON.parse(JSON.stringify(existing));
+          
+          DMLib.Pure.Participant.mergeParticipants(existing, incoming);
+          
+          expect(existing).toEqual(originalExisting);
+        });
+
+        it('should not mutate incoming record', () => {
+          const existing = {
+            'pk1': { pubkey: 'pk1', derivedRelays: ['wss://relay1.com'], blockedRelays: [], lastFetched: 100 }
+          };
+          const incoming = {
+            'pk2': { pubkey: 'pk2', derivedRelays: ['wss://relay2.com'], blockedRelays: [], lastFetched: 200 }
+          };
+          const originalIncoming = JSON.parse(JSON.stringify(incoming));
+          
+          DMLib.Pure.Participant.mergeParticipants(existing, incoming);
+          
+          expect(incoming).toEqual(originalIncoming);
+        });
+
+        it('should handle large number of participants', () => {
+          const existing: Record<string, any> = {};
+          const incoming: Record<string, any> = {};
+          
+          for (let i = 0; i < 50; i++) {
+            existing[`pk${i}`] = { pubkey: `pk${i}`, derivedRelays: [], blockedRelays: [], lastFetched: i };
+          }
+          
+          for (let i = 25; i < 75; i++) {
+            incoming[`pk${i}`] = { pubkey: `pk${i}`, derivedRelays: ['wss://new.com'], blockedRelays: [], lastFetched: i + 1000 };
+          }
+          
+          const result = DMLib.Pure.Participant.mergeParticipants(existing, incoming);
+          
+          // Should have 75 total participants (0-74)
+          expect(Object.keys(result).length).toBe(75);
+          
+          // First 25 should be unchanged from existing
+          expect(result['pk0'].lastFetched).toBe(0);
+          expect(result['pk24'].lastFetched).toBe(24);
+          
+          // Middle 25 should be updated from incoming
+          expect(result['pk25'].lastFetched).toBe(1025);
+          expect(result['pk49'].lastFetched).toBe(1049);
+          
+          // Last 25 should be new from incoming
+          expect(result['pk50'].lastFetched).toBe(1050);
+          expect(result['pk74'].lastFetched).toBe(1074);
+        });
+
+        it('should handle realistic participant data', () => {
+          const existing = {
+            'abc123': {
+              pubkey: 'abc123',
+              derivedRelays: ['wss://relay.damus.io', 'wss://nos.lol'],
+              blockedRelays: ['wss://spam-relay.com'],
+              lastFetched: 1734700000
+            }
+          };
+          const incoming = {
+            'def456': {
+              pubkey: 'def456',
+              derivedRelays: ['wss://relay.nostr.band'],
+              blockedRelays: [],
+              lastFetched: 1734700100
+            }
+          };
+          const result = DMLib.Pure.Participant.mergeParticipants(existing, incoming);
+          
+          expect(Object.keys(result).length).toBe(2);
+          expect(result['abc123']).toEqual(existing['abc123']);
+          expect(result['def456']).toEqual(incoming['def456']);
+        });
+      });
+      
       it.todo('getStaleParticipants');
       
       describe('getNewPubkeys', () => {

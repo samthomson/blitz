@@ -117,8 +117,17 @@ const buildParticipantsMap = (
   relayMode: RelayMode,
   discoveryRelays: string[]
 ): Record<string, Participant> => { return {}; }
-// TODO: Implement mergeParticipants
-const mergeParticipants = (existing: Record<string, Participant>, incoming: Record<string, Participant>): Record<string, Participant> => { return {}; }
+/**
+ * Merges two participant records, with incoming participants taking precedence.
+ * If a participant exists in both records, the incoming one replaces the existing one.
+ * 
+ * @param existing - The existing participant records
+ * @param incoming - The incoming participant records (these take precedence)
+ * @returns A new merged record with all participants
+ */
+const mergeParticipants = (existing: Record<string, Participant>, incoming: Record<string, Participant>): Record<string, Participant> => {
+  return { ...existing, ...incoming };
+}
 /**
  * Computes the 'since' timestamp for fetching messages, accounting for NIP-17 timestamp fuzzing.
  * NIP-17 allows timestamps to be fuzzed for privacy, so we need to query from before the last cache time
