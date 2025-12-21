@@ -82,12 +82,16 @@ const extractBlockedRelays = (kind10006: NostrEvent | null): string[] => {
  * @param discoveryRelays - Default discovery relays
  * @returns Deduplicated array of relay URLs to query, with blocked relays filtered out
  */
-const deriveRelaySet = (kind10002: NostrEvent | null, kind10050: NostrEvent | null, blockedRelays: string[], relayMode: RelayMode, discoveryRelays: string[]): string[] => {
-  const blockedSet = new Set(blockedRelays);
+const deriveRelaySet = (kind10002: NostrEvent | null, kind10050: NostrEvent | null, kind10006: NostrEvent | null, relayMode: RelayMode, discoveryRelays: string[]): { derivedRelays: string[]; blockedRelays: string[] } => {
+  // Extract blocked relays
+  const blockedRelays = extractBlockedRelays(kind10006);
   
   // Discovery mode: only use discovery relays, ignore user's lists
   if (relayMode === 'discovery') {
-    return discoveryRelays.filter(relay => !blockedSet.has(relay));
+    return {
+      derivedRelays: discoveryRelays,
+      blockedRelays
+    };
   }
   
   // For hybrid and strict_outbox modes: extract user's relays
@@ -98,7 +102,7 @@ const deriveRelaySet = (kind10002: NostrEvent | null, kind10050: NostrEvent | nu
     kind10050.tags
       .filter(tag => tag[0] === 'relay' && tag[1])
       .map(tag => tag[1].trim())
-      .filter(url => url && !blockedSet.has(url))
+      .filter(url => url)
       .forEach(relay => relaySet.add(relay));
   }
   
@@ -112,18 +116,19 @@ const deriveRelaySet = (kind10002: NostrEvent | null, kind10050: NostrEvent | nu
         return !marker || marker === 'read';
       })
       .map(tag => tag[1].trim())
-      .filter(url => url && !blockedSet.has(url))
+      .filter(url => url)
       .forEach(relay => relaySet.add(relay));
   }
   
   // Hybrid mode: add discovery relays too
   if (relayMode === 'hybrid') {
-    discoveryRelays
-      .filter(relay => !blockedSet.has(relay))
-      .forEach(relay => relaySet.add(relay));
+    discoveryRelays.forEach(relay => relaySet.add(relay));
   }
   
-  return Array.from(relaySet);
+  return {
+    derivedRelays: Array.from(relaySet),
+    blockedRelays
+  };
 }
 // TODO: Implement getStaleParticipants
 const getStaleParticipants = (participants: Record<string, Participant>, relayTTL: number, now: number): string[] => { return []; }

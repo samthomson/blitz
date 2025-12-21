@@ -17,8 +17,8 @@ export interface DMSettings {
 
 export interface Participant {
   pubkey: string;
-  derivedRelays: string[];
-  blockedRelays: string[];
+  derivedRelays: string[]; // Their relay list (unfiltered by our blocks)
+  blockedRelays: string[]; // Their kind 10006 blocked relay list
   lastFetched: number;
 }
 

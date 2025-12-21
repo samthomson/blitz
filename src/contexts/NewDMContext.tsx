@@ -9,6 +9,7 @@ import { RELAY_MODE } from '@/lib/dmTypes';
 import type {
   DMSettings,
   MessagingState,
+  Participant,
 } from '@/lib/dmTypes';
 import * as DMLib from '@/lib/dmLib';
 import type { Signer } from '@/lib/dmLib';
@@ -26,24 +27,37 @@ const initialiseMessaging = async (nostr: NPool, signer: Signer, myPubkey: strin
   
   // A. Fetch my relay lists
   const { myLists, myBlockedRelays } = await DMLib.Impure.Relay.fetchMyRelayInfo(nostr, settings.discoveryRelays, myPubkey);
-  // B. Derive my relay set
-  const relaySet = DMLib.Pure.Relay.deriveRelaySet(myLists.kind10002, myLists.kind10050, myBlockedRelays, settings.relayMode, settings.discoveryRelays);
-  // B.2/B.3 Refresh stale participants (warm start only)
-  const baseParticipants = mode === DMLib.StartupMode.WARM ? await DMLib.Impure.Participant.refreshStaleParticipants(nostr, cached.participants, myBlockedRelays, settings.relayMode, settings.discoveryRelays, settings.relayTTL) : {};
-  // C. Query messages
+  // B. Derive my relay set and blocked relays
+  const { derivedRelays, blockedRelays } = DMLib.Pure.Relay.deriveRelaySet(myLists.kind10002, myLists.kind10050, myLists.kind10006, settings.relayMode, settings.discoveryRelays);
+  
+  // B.1 Create my participant entry (single source of truth for my relay info)
+  const myParticipant: Participant = {
+    pubkey: myPubkey,
+    derivedRelays,
+    blockedRelays,
+    lastFetched: Date.now()
+  };
+  
+  // B.2 Initialize base participants (warm start: refresh from cache, cold start: empty)
+  const refreshedParticipants = mode === DMLib.StartupMode.WARM
+    ? await DMLib.Impure.Participant.refreshStaleParticipants(nostr, cached.participants, settings.relayMode, settings.discoveryRelays, settings.relayTTL)
+    : {};
+  const baseParticipants = { ...refreshedParticipants, [myPubkey]: myParticipant };
+  
+  // C. Query messages (use current user's relays from participants)
   const since = mode === DMLib.StartupMode.WARM ? DMLib.Pure.Sync.computeSinceTimestamp(cached.syncState.lastCacheTime, 2) : null;
-  const { messagesWithMetadata, limitReached: isLimitReachedDuringInitialQuery } = await DMLib.Impure.Message.queryMessages(nostr, signer, relaySet, myPubkey, since, settings.queryLimit);
+  const { messagesWithMetadata, limitReached: isLimitReachedDuringInitialQuery } = await DMLib.Impure.Message.queryMessages(nostr, signer, baseParticipants[myPubkey].derivedRelays, myPubkey, since, settings.queryLimit);
   // D. Extract unique users
   const newPubkeys = DMLib.Pure.Participant.extractNewPubkeys(messagesWithMetadata, baseParticipants, myPubkey, mode);
   // E+F. Fetch relay lists and merge participants
-  const participants = await DMLib.Impure.Participant.fetchAndMergeParticipants(nostr, baseParticipants, newPubkeys, myBlockedRelays, settings.relayMode, settings.discoveryRelays);
+  const participants = await DMLib.Impure.Participant.fetchAndMergeParticipants(nostr, baseParticipants, newPubkeys, settings.relayMode, settings.discoveryRelays);
   // H. Find new relays to query
-  const alreadyQueried = mode === DMLib.StartupMode.WARM ? cached.syncState.queriedRelays : relaySet;
+  const alreadyQueried = mode === DMLib.StartupMode.WARM ? cached.syncState.queriedRelays : participants[myPubkey].derivedRelays;
   const newRelays = DMLib.Pure.Relay.findNewRelaysToQuery(participants, alreadyQueried);
   // I. Query new relays
   const { allMessages, limitReached: isLimitReachedDuringGapQuery } = await DMLib.Impure.Message.queryNewRelays(nostr, signer, newRelays, myPubkey, settings.queryLimit);
   // J. Build and save
-  const allQueriedRelays = DMLib.Pure.Relay.computeAllQueriedRelays(mode, cached, relaySet, newRelays);
+  const allQueriedRelays = DMLib.Pure.Relay.computeAllQueriedRelays(mode, cached, participants[myPubkey].derivedRelays, newRelays);
   return await DMLib.Impure.Cache.buildAndSaveCache(myPubkey, participants, allQueriedRelays, isLimitReachedDuringInitialQuery || isLimitReachedDuringGapQuery);
 }
 
