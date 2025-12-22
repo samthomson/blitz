@@ -130,8 +130,26 @@ const deriveRelaySet = (kind10002: NostrEvent | null, kind10050: NostrEvent | nu
     blockedRelays
   };
 }
-// TODO: Implement getStaleParticipants
-const getStaleParticipants = (participants: Record<string, Participant>, relayTTL: number, now: number): string[] => { return []; }
+/**
+ * Returns pubkeys of participants whose relay information is stale (older than TTL).
+ * 
+ * @param participants - Record of participants to check
+ * @param relayTTL - Time-to-live for relay info in milliseconds
+ * @param now - Current timestamp in milliseconds
+ * @returns Array of pubkeys that need refreshing
+ */
+const getStaleParticipants = (participants: Record<string, Participant>, relayTTL: number, now: number): string[] => {
+  const staleThreshold = now - relayTTL;
+  const stalePubkeys: string[] = [];
+  
+  for (const [pubkey, participant] of Object.entries(participants)) {
+    if (participant.lastFetched < staleThreshold) {
+      stalePubkeys.push(pubkey);
+    }
+  }
+  
+  return stalePubkeys;
+}
 /**
  * Returns pubkeys that are in foundPubkeys but not in existingPubkeys.
  * This is used to identify new participants that need to be fetched.

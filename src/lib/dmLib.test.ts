@@ -877,7 +877,137 @@ describe('DMLib', () => {
         });
       });
       
-      it.todo('getStaleParticipants');
+      describe('getStaleParticipants', () => {
+        const ONE_DAY = 24 * 60 * 60 * 1000;
+        const ONE_WEEK = 7 * ONE_DAY;
+        
+        it('should return empty array when participants is empty', () => {
+          const now = Date.now();
+          
+          const result = DMLib.Pure.Participant.getStaleParticipants({}, ONE_WEEK, now);
+          
+          expect(result).toEqual([]);
+        });
+
+        it('should return empty array when no participants are stale', () => {
+          const now = Date.now();
+          const participants = {
+            alice: { pubkey: 'alice', derivedRelays: [], blockedRelays: [], lastFetched: now - ONE_DAY },
+            bob: { pubkey: 'bob', derivedRelays: [], blockedRelays: [], lastFetched: now - (ONE_DAY * 3) }
+          };
+          
+          const result = DMLib.Pure.Participant.getStaleParticipants(participants, ONE_WEEK, now);
+          
+          expect(result).toEqual([]);
+        });
+
+        it('should return stale participant when lastFetched exceeds TTL', () => {
+          const now = Date.now();
+          const participants = {
+            alice: { pubkey: 'alice', derivedRelays: [], blockedRelays: [], lastFetched: now - (ONE_WEEK + 1000) }
+          };
+          
+          const result = DMLib.Pure.Participant.getStaleParticipants(participants, ONE_WEEK, now);
+          
+          expect(result).toEqual(['alice']);
+        });
+
+        it('should return multiple stale participants', () => {
+          const now = Date.now();
+          const participants = {
+            alice: { pubkey: 'alice', derivedRelays: [], blockedRelays: [], lastFetched: now - (ONE_WEEK + 1000) },
+            bob: { pubkey: 'bob', derivedRelays: [], blockedRelays: [], lastFetched: now - ONE_DAY },
+            charlie: { pubkey: 'charlie', derivedRelays: [], blockedRelays: [], lastFetched: now - (ONE_WEEK + 5000) }
+          };
+          
+          const result = DMLib.Pure.Participant.getStaleParticipants(participants, ONE_WEEK, now);
+          
+          expect(result).toContain('alice');
+          expect(result).toContain('charlie');
+          expect(result).not.toContain('bob');
+          expect(result).toHaveLength(2);
+        });
+
+        it('should handle participant at exact TTL boundary (not stale)', () => {
+          const now = Date.now();
+          const participants = {
+            alice: { pubkey: 'alice', derivedRelays: [], blockedRelays: [], lastFetched: now - ONE_WEEK }
+          };
+          
+          const result = DMLib.Pure.Participant.getStaleParticipants(participants, ONE_WEEK, now);
+          
+          expect(result).toEqual([]);
+        });
+
+        it('should handle participant just past TTL boundary (stale)', () => {
+          const now = Date.now();
+          const participants = {
+            alice: { pubkey: 'alice', derivedRelays: [], blockedRelays: [], lastFetched: now - ONE_WEEK - 1 }
+          };
+          
+          const result = DMLib.Pure.Participant.getStaleParticipants(participants, ONE_WEEK, now);
+          
+          expect(result).toEqual(['alice']);
+        });
+
+        it('should handle very old participants', () => {
+          const now = Date.now();
+          const participants = {
+            alice: { pubkey: 'alice', derivedRelays: [], blockedRelays: [], lastFetched: now - (ONE_WEEK * 52) } // 1 year old
+          };
+          
+          const result = DMLib.Pure.Participant.getStaleParticipants(participants, ONE_WEEK, now);
+          
+          expect(result).toEqual(['alice']);
+        });
+
+        it('should handle short TTL', () => {
+          const now = Date.now();
+          const ONE_HOUR = 60 * 60 * 1000;
+          const participants = {
+            alice: { pubkey: 'alice', derivedRelays: [], blockedRelays: [], lastFetched: now - (ONE_HOUR + 1000) },
+            bob: { pubkey: 'bob', derivedRelays: [], blockedRelays: [], lastFetched: now - 1000 }
+          };
+          
+          const result = DMLib.Pure.Participant.getStaleParticipants(participants, ONE_HOUR, now);
+          
+          expect(result).toEqual(['alice']);
+        });
+
+        it('should handle realistic scenario with mixed freshness', () => {
+          const now = 1734700000000; // Fixed timestamp
+          const participants = {
+            alice: { pubkey: 'alice', derivedRelays: ['wss://alice.com'], blockedRelays: [], lastFetched: now - ONE_DAY }, // Fresh
+            bob: { pubkey: 'bob', derivedRelays: ['wss://bob.com'], blockedRelays: [], lastFetched: now - (ONE_WEEK + 1000) }, // Stale
+            charlie: { pubkey: 'charlie', derivedRelays: ['wss://charlie.com'], blockedRelays: [], lastFetched: now - (ONE_DAY * 5) }, // Fresh
+            dave: { pubkey: 'dave', derivedRelays: [], blockedRelays: ['wss://spam.com'], lastFetched: now - (ONE_WEEK * 2) } // Stale
+          };
+          
+          const result = DMLib.Pure.Participant.getStaleParticipants(participants, ONE_WEEK, now);
+          
+          expect(result).toHaveLength(2);
+          expect(result).toContain('bob');
+          expect(result).toContain('dave');
+          expect(result).not.toContain('alice');
+          expect(result).not.toContain('charlie');
+        });
+
+        it('should return all participants when all are stale', () => {
+          const now = Date.now();
+          const participants = {
+            alice: { pubkey: 'alice', derivedRelays: [], blockedRelays: [], lastFetched: now - (ONE_WEEK + 1000) },
+            bob: { pubkey: 'bob', derivedRelays: [], blockedRelays: [], lastFetched: now - (ONE_WEEK + 2000) },
+            charlie: { pubkey: 'charlie', derivedRelays: [], blockedRelays: [], lastFetched: now - (ONE_WEEK + 3000) }
+          };
+          
+          const result = DMLib.Pure.Participant.getStaleParticipants(participants, ONE_WEEK, now);
+          
+          expect(result).toHaveLength(3);
+          expect(result).toContain('alice');
+          expect(result).toContain('bob');
+          expect(result).toContain('charlie');
+        });
+      });
       
       describe('getNewPubkeys', () => {
         it('should return empty array when foundPubkeys is empty', () => {
