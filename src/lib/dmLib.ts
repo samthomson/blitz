@@ -486,15 +486,38 @@ const fetchMyRelayInfo = async (nostr: NPool, discoveryRelays: string[], myPubke
 const queryMessages = async (nostr: NPool, signer: Signer, relays: string[], myPubkey: string, since: number | null, queryLimit: number): Promise<{ messagesWithMetadata: MessageWithMetadata[]; limitReached: boolean }> => {
   return { messagesWithMetadata: [], limitReached: false };
 }
-// TODO: Implement fetchAndMergeParticipants
+/**
+ * Fetches relay lists for new pubkeys and merges them with existing participants.
+ * Preserves baseParticipants (including current user) and adds new participants.
+ * 
+ * @param nostr - Nostr pool for querying relays
+ * @param baseParticipants - Existing participants (including current user)
+ * @param newPubkeys - New pubkeys to fetch relay lists for
+ * @param relayMode - Relay mode for deriving relay sets
+ * @param discoveryRelays - Discovery relays to use as fallback
+ * @returns Merged participants map (baseParticipants + new participants)
+ */
 const fetchAndMergeParticipants = async (
   nostr: NPool,
   baseParticipants: Record<string, Participant>,
   newPubkeys: string[],
-  myBlockedRelays: string[],
   relayMode: RelayMode,
   discoveryRelays: string[]
-): Promise<Record<string, Participant>> => { return {}; }
+): Promise<Record<string, Participant>> => {
+  // If no new pubkeys, just return base participants
+  if (newPubkeys.length === 0) {
+    return baseParticipants;
+  }
+  
+  // Fetch relay lists for new pubkeys
+  const relayListsMap = await fetchRelayLists(nostr, discoveryRelays, newPubkeys);
+  
+  // Build participants for new pubkeys
+  const newParticipants = buildParticipantsMap(newPubkeys, relayListsMap, relayMode, discoveryRelays);
+  
+  // Merge with base participants (base takes precedence - keeps current user intact)
+  return mergeParticipants(newParticipants, baseParticipants);
+}
 // TODO: Implement queryNewRelays
 const queryNewRelays = async (nostr: NPool, signer: Signer, relays: string[], myPubkey: string, queryLimit: number): Promise<{ allMessages: MessageWithMetadata[]; limitReached: boolean }> => {
   return { allMessages: [], limitReached: false };

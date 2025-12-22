@@ -1655,7 +1655,241 @@ describe('DMLib', () => {
         });
       });
       
-      it.todo('fetchAndMergeParticipants');
+      describe('fetchAndMergeParticipants', () => {
+        it('should return base participants unchanged when no new pubkeys', async () => {
+          const mockNostr = {
+            group: () => ({ query: vi.fn() })
+          };
+          
+          const baseParticipants: Record<string, Participant> = {
+            alice: { pubkey: 'alice', derivedRelays: ['wss://alice.com'], blockedRelays: [], lastFetched: 1000 },
+            bob: { pubkey: 'bob', derivedRelays: ['wss://bob.com'], blockedRelays: [], lastFetched: 2000 }
+          };
+          
+          const result = await DMLib.Impure.Participant.fetchAndMergeParticipants(
+            mockNostr as any,
+            baseParticipants,
+            [], // No new pubkeys
+            'hybrid',
+            ['wss://discovery.com']
+          );
+          
+          expect(result).toEqual(baseParticipants);
+          expect(result).toBe(baseParticipants); // Should be same object reference
+        });
+
+        it('should preserve base participants (including current user) when adding new ones', async () => {
+          const mockEvents = [
+            { id: 'e1', pubkey: 'carol', created_at: 100, kind: 10002, tags: [['r', 'wss://carol.com', 'read']], content: '', sig: 'sig1' }
+          ];
+          
+          const mockNostr = {
+            group: () => ({
+              query: vi.fn().mockResolvedValue(mockEvents)
+            })
+          };
+          
+          const baseParticipants: Record<string, Participant> = {
+            myPubkey: { pubkey: 'myPubkey', derivedRelays: ['wss://my-inbox.com'], blockedRelays: [], lastFetched: 5000 },
+            alice: { pubkey: 'alice', derivedRelays: ['wss://alice.com'], blockedRelays: [], lastFetched: 1000 }
+          };
+          
+          const result = await DMLib.Impure.Participant.fetchAndMergeParticipants(
+            mockNostr as any,
+            baseParticipants,
+            ['carol'], // New pubkey to fetch
+            'hybrid',
+            ['wss://discovery.com']
+          );
+          
+          // Should preserve base participants exactly
+          expect(result.myPubkey).toEqual(baseParticipants.myPubkey);
+          expect(result.alice).toEqual(baseParticipants.alice);
+          
+          // Should add new participant
+          expect(result.carol).toBeDefined();
+          expect(result.carol.pubkey).toBe('carol');
+          expect(result.carol.derivedRelays).toContain('wss://carol.com');
+          
+          expect(Object.keys(result)).toHaveLength(3);
+        });
+
+        it('should fetch relay lists for new pubkeys and build participants', async () => {
+          const mockEvents = [
+            { id: 'e1', pubkey: 'alice', created_at: 100, kind: 10002, tags: [['r', 'wss://alice.com', 'read']], content: '', sig: 'sig1' },
+            { id: 'e2', pubkey: 'bob', created_at: 200, kind: 10050, tags: [['relay', 'wss://bob-inbox.com']], content: '', sig: 'sig2' }
+          ];
+          
+          const mockNostr = {
+            group: () => ({
+              query: vi.fn().mockResolvedValue(mockEvents)
+            })
+          };
+          
+          const baseParticipants: Record<string, Participant> = {
+            me: { pubkey: 'me', derivedRelays: ['wss://my.com'], blockedRelays: [], lastFetched: 1000 }
+          };
+          
+          const result = await DMLib.Impure.Participant.fetchAndMergeParticipants(
+            mockNostr as any,
+            baseParticipants,
+            ['alice', 'bob'],
+            'strict_outbox',
+            ['wss://discovery.com']
+          );
+          
+          // Should preserve base
+          expect(result.me).toEqual(baseParticipants.me);
+          
+          // Should add Alice with her relays
+          expect(result.alice).toBeDefined();
+          expect(result.alice.derivedRelays).toEqual(['wss://alice.com']);
+          
+          // Should add Bob with his inbox relay (priority over 10002)
+          expect(result.bob).toBeDefined();
+          expect(result.bob.derivedRelays).toEqual(['wss://bob-inbox.com']);
+          
+          expect(Object.keys(result)).toHaveLength(3);
+        });
+
+        it('should handle multiple new pubkeys with mixed relay configurations', async () => {
+          const mockEvents = [
+            { id: 'e1', pubkey: 'alice', created_at: 100, kind: 10002, tags: [['r', 'wss://alice-1.com', 'read'], ['r', 'wss://alice-2.com', 'read']], content: '', sig: 'sig1' },
+            { id: 'e2', pubkey: 'bob', created_at: 200, kind: 10050, tags: [['relay', 'wss://bob-dm.com']], content: '', sig: 'sig2' },
+            { id: 'e3', pubkey: 'carol', created_at: 300, kind: 10006, tags: [['r', 'wss://blocked.com']], content: '', sig: 'sig3' }
+          ];
+          
+          const mockNostr = {
+            group: () => ({
+              query: vi.fn().mockResolvedValue(mockEvents)
+            })
+          };
+          
+          const baseParticipants: Record<string, Participant> = {
+            current: { pubkey: 'current', derivedRelays: ['wss://current.com'], blockedRelays: [], lastFetched: 1000 }
+          };
+          
+          const result = await DMLib.Impure.Participant.fetchAndMergeParticipants(
+            mockNostr as any,
+            baseParticipants,
+            ['alice', 'bob', 'carol'],
+            'hybrid',
+            ['wss://discovery.com']
+          );
+          
+          expect(Object.keys(result)).toHaveLength(4);
+          expect(result.current).toEqual(baseParticipants.current);
+          
+          expect(result.alice.derivedRelays).toHaveLength(3); // 2 from 10002 + discovery
+          expect(result.bob.derivedRelays).toHaveLength(2); // 1 from 10050 + discovery
+          expect(result.carol.derivedRelays).toEqual(['wss://discovery.com']); // Only discovery (no 10002/10050)
+          expect(result.carol.blockedRelays).toEqual(['wss://blocked.com']);
+        });
+
+        it('should respect relay mode when building new participants', async () => {
+          const mockEvents = [
+            { id: 'e1', pubkey: 'alice', created_at: 100, kind: 10002, tags: [['r', 'wss://alice.com', 'read']], content: '', sig: 'sig1' }
+          ];
+          
+          const mockNostr = {
+            group: () => ({
+              query: vi.fn().mockResolvedValue(mockEvents)
+            })
+          };
+          
+          const baseParticipants: Record<string, Participant> = {};
+          
+          // Test with discovery mode
+          const resultDiscovery = await DMLib.Impure.Participant.fetchAndMergeParticipants(
+            mockNostr as any,
+            baseParticipants,
+            ['alice'],
+            'discovery',
+            ['wss://discovery.com']
+          );
+          
+          expect(resultDiscovery.alice.derivedRelays).toEqual(['wss://discovery.com']);
+          
+          // Test with strict_outbox mode
+          const resultStrict = await DMLib.Impure.Participant.fetchAndMergeParticipants(
+            mockNostr as any,
+            baseParticipants,
+            ['alice'],
+            'strict_outbox',
+            ['wss://discovery.com']
+          );
+          
+          expect(resultStrict.alice.derivedRelays).toEqual(['wss://alice.com']);
+        });
+
+        it('should handle query errors gracefully and return base participants', async () => {
+          const mockNostr = {
+            group: () => ({
+              query: async () => {
+                throw new Error('Network error');
+              }
+            })
+          } as any;
+          
+          const baseParticipants: Record<string, Participant> = {
+            me: { pubkey: 'me', derivedRelays: ['wss://my.com'], blockedRelays: [], lastFetched: 1000 }
+          };
+          
+          await expect(
+            DMLib.Impure.Participant.fetchAndMergeParticipants(
+              mockNostr,
+              baseParticipants,
+              ['alice'],
+              'hybrid',
+              ['wss://discovery.com']
+            )
+          ).rejects.toThrow();
+        });
+
+        it('should work with realistic scenario - current user + conversation partners', async () => {
+          const mockEvents = [
+            { id: 'e1', pubkey: 'alice', created_at: 100, kind: 10002, tags: [['r', 'wss://alice.com', 'read']], content: '', sig: 'sig1' },
+            { id: 'e2', pubkey: 'bob', created_at: 200, kind: 10050, tags: [['relay', 'wss://bob-dm.com']], content: '', sig: 'sig2' },
+            { id: 'e3', pubkey: 'bob', created_at: 300, kind: 10006, tags: [['r', 'wss://spam.com']], content: '', sig: 'sig3' }
+          ];
+          
+          const mockNostr = {
+            group: () => ({
+              query: vi.fn().mockResolvedValue(mockEvents)
+            })
+          };
+          
+          // Base participants includes current user
+          const baseParticipants: Record<string, Participant> = {
+            me: { pubkey: 'me', derivedRelays: ['wss://my-inbox.com'], blockedRelays: [], lastFetched: Date.now() }
+          };
+          
+          // Discovered Alice and Bob from messages
+          const result = await DMLib.Impure.Participant.fetchAndMergeParticipants(
+            mockNostr as any,
+            baseParticipants,
+            ['alice', 'bob'],
+            'hybrid',
+            ['wss://relay.nostr.band']
+          );
+          
+          // Current user preserved
+          expect(result.me).toBeDefined();
+          expect(result.me.derivedRelays).toEqual(['wss://my-inbox.com']);
+          
+          // Alice added with her relays
+          expect(result.alice).toBeDefined();
+          expect(result.alice.derivedRelays).toContain('wss://alice.com');
+          expect(result.alice.derivedRelays).toContain('wss://relay.nostr.band');
+          
+          // Bob added with his inbox relay + discovery
+          expect(result.bob).toBeDefined();
+          expect(result.bob.derivedRelays).toContain('wss://bob-dm.com');
+          expect(result.bob.blockedRelays).toEqual(['wss://spam.com']);
+          
+          expect(Object.keys(result)).toHaveLength(3);
+        });
+      });
     });
 
     describe('Cache', () => {
