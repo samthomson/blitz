@@ -55,7 +55,38 @@ const initialiseMessaging = async (nostr: NPool, signer: Signer, myPubkey: strin
   console.log('[NewDM] C. Querying messages...');
   const since = mode === DMLib.StartupMode.WARM ? DMLib.Pure.Sync.computeSinceTimestamp(cached.syncState.lastCacheTime, 2) : null;
   const { messagesWithMetadata, limitReached: isLimitReachedDuringInitialQuery } = await DMLib.Impure.Message.queryMessages(nostr, signer, baseParticipants[myPubkey].derivedRelays, myPubkey, since, settings.queryLimit);
-  console.log('[NewDM] C. Got messages:', messagesWithMetadata.length);
+  
+  // Detailed logging for debugging
+  const nip04Count = messagesWithMetadata.filter(m => m.event.kind === 4).length;
+  const nip17Count = messagesWithMetadata.filter(m => m.event.kind === 14 || m.event.kind === 15).length;
+  const uniqueParticipants = new Set(messagesWithMetadata.flatMap(m => m.participants || []));
+  
+  console.log('[NewDM] C. Got messages:', {
+    total: messagesWithMetadata.length,
+    nip04: nip04Count,
+    nip17: nip17Count,
+    uniqueParticipants: uniqueParticipants.size,
+    limitReached: isLimitReachedDuringInitialQuery,
+    sample: messagesWithMetadata.slice(0, 3).map(m => ({
+      kind: m.event.kind,
+      senderPubkey: m.senderPubkey?.substring(0, 8),
+      participants: m.participants?.map(p => p.substring(0, 8)),
+      subject: m.subject,
+      timestamp: new Date(m.event.created_at * 1000).toISOString()
+    }))
+  });
+  
+  // Log full array for inspection (collapsed in console)
+  console.groupCollapsed('[NewDM] C. All messages (click to expand)');
+  console.log('Full array:', messagesWithMetadata);
+  console.table(messagesWithMetadata.slice(0, 10).map(m => ({
+    kind: m.event.kind,
+    sender: m.senderPubkey?.substring(0, 12) + '...',
+    participantCount: m.participants?.length || 0,
+    subject: m.subject || '(none)',
+    date: new Date(m.event.created_at * 1000).toLocaleString()
+  })));
+  console.groupEnd();
   
   // D. Extract unique users
   console.log('[NewDM] D. Extracting new pubkeys...');
