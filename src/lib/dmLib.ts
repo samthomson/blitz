@@ -213,8 +213,27 @@ const dedupeMessages = (existing: Message[], incoming: Message[]): Message[] => 
 const computeConversationId = (participantPubkeys: string[], subject: string): string => { return ''; }
 // TODO: Implement groupMessagesIntoConversations
 const groupMessagesIntoConversations = (messages: Message[], myPubkey: string): Record<string, Message[]> => { return {}; }
-// TODO: Implement buildRelayToUsersMap
-const buildRelayToUsersMap = (participants: Record<string, Participant>): Map<string, string[]> => { return new Map(); }
+/**
+ * Inverts participant->relays structure to relay->users structure
+ * Used to determine which users should be queried on each relay
+ * 
+ * @param participants - Map of pubkey to participant data
+ * @returns Map of relay URL to array of pubkeys who use that relay
+ */
+const buildRelayToUsersMap = (participants: Record<string, Participant>): Map<string, string[]> => {
+  const relayMap = new Map<string, string[]>();
+  
+  for (const [pubkey, participant] of Object.entries(participants)) {
+    for (const relayUrl of participant.derivedRelays) {
+      if (!relayMap.has(relayUrl)) {
+        relayMap.set(relayUrl, []);
+      }
+      relayMap.get(relayUrl)!.push(pubkey);
+    }
+  }
+  
+  return relayMap;
+}
 // TODO: Implement filterNewRelayUserCombos
 const filterNewRelayUserCombos = (relayUserMap: Map<string, string[]>, alreadyQueriedRelays: string[]): string[] => { return []; }
 /**

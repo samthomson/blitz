@@ -435,9 +435,171 @@ describe('DMLib', () => {
         });
       });
       
+      describe('buildRelayToUsersMap', () => {
+        it('should return empty map for empty participants', () => {
+          const result = DMLib.Pure.Relay.buildRelayToUsersMap({});
+          expect(result.size).toBe(0);
+        });
+
+        it('should map single relay to single user', () => {
+          const participants = {
+            alice: { pubkey: 'alice', derivedRelays: ['wss://relay1.com'], blockedRelays: [], lastFetched: 1000 }
+          };
+          
+          const result = DMLib.Pure.Relay.buildRelayToUsersMap(participants);
+          
+          expect(result.size).toBe(1);
+          expect(result.get('wss://relay1.com')).toEqual(['alice']);
+        });
+
+        it('should map multiple relays for single user', () => {
+          const participants = {
+            alice: { 
+              pubkey: 'alice', 
+              derivedRelays: ['wss://relay1.com', 'wss://relay2.com', 'wss://relay3.com'], 
+              blockedRelays: [], 
+              lastFetched: 1000 
+            }
+          };
+          
+          const result = DMLib.Pure.Relay.buildRelayToUsersMap(participants);
+          
+          expect(result.size).toBe(3);
+          expect(result.get('wss://relay1.com')).toEqual(['alice']);
+          expect(result.get('wss://relay2.com')).toEqual(['alice']);
+          expect(result.get('wss://relay3.com')).toEqual(['alice']);
+        });
+
+        it('should group multiple users on same relay', () => {
+          const participants = {
+            alice: { pubkey: 'alice', derivedRelays: ['wss://relay1.com'], blockedRelays: [], lastFetched: 1000 },
+            bob: { pubkey: 'bob', derivedRelays: ['wss://relay1.com'], blockedRelays: [], lastFetched: 2000 }
+          };
+          
+          const result = DMLib.Pure.Relay.buildRelayToUsersMap(participants);
+          
+          expect(result.size).toBe(1);
+          expect(result.get('wss://relay1.com')).toEqual(['alice', 'bob']);
+        });
+
+        it('should handle users with overlapping relays', () => {
+          const participants = {
+            alice: { pubkey: 'alice', derivedRelays: ['wss://relay1.com', 'wss://relay2.com'], blockedRelays: [], lastFetched: 1000 },
+            bob: { pubkey: 'bob', derivedRelays: ['wss://relay2.com', 'wss://relay3.com'], blockedRelays: [], lastFetched: 2000 }
+          };
+          
+          const result = DMLib.Pure.Relay.buildRelayToUsersMap(participants);
+          
+          expect(result.size).toBe(3);
+          expect(result.get('wss://relay1.com')).toEqual(['alice']);
+          expect(result.get('wss://relay2.com')).toEqual(['alice', 'bob']);
+          expect(result.get('wss://relay3.com')).toEqual(['bob']);
+        });
+
+        it('should handle user with no relays', () => {
+          const participants = {
+            alice: { pubkey: 'alice', derivedRelays: [], blockedRelays: [], lastFetched: 1000 },
+            bob: { pubkey: 'bob', derivedRelays: ['wss://relay1.com'], blockedRelays: [], lastFetched: 2000 }
+          };
+          
+          const result = DMLib.Pure.Relay.buildRelayToUsersMap(participants);
+          
+          expect(result.size).toBe(1);
+          expect(result.get('wss://relay1.com')).toEqual(['bob']);
+        });
+
+        it('should handle complex multi-user multi-relay scenario', () => {
+          const participants = {
+            alice: { 
+              pubkey: 'alice', 
+              derivedRelays: ['wss://relay1.com', 'wss://relay2.com'], 
+              blockedRelays: [], 
+              lastFetched: 1000 
+            },
+            bob: { 
+              pubkey: 'bob', 
+              derivedRelays: ['wss://relay2.com', 'wss://relay3.com'], 
+              blockedRelays: [], 
+              lastFetched: 2000 
+            },
+            charlie: { 
+              pubkey: 'charlie', 
+              derivedRelays: ['wss://relay1.com', 'wss://relay3.com', 'wss://relay4.com'], 
+              blockedRelays: [], 
+              lastFetched: 3000 
+            }
+          };
+          
+          const result = DMLib.Pure.Relay.buildRelayToUsersMap(participants);
+          
+          expect(result.size).toBe(4);
+          expect(result.get('wss://relay1.com')).toEqual(['alice', 'charlie']);
+          expect(result.get('wss://relay2.com')).toEqual(['alice', 'bob']);
+          expect(result.get('wss://relay3.com')).toEqual(['bob', 'charlie']);
+          expect(result.get('wss://relay4.com')).toEqual(['charlie']);
+        });
+
+        it('should preserve order of users as they appear in participants', () => {
+          const participants = {
+            alice: { pubkey: 'alice', derivedRelays: ['wss://relay1.com'], blockedRelays: [], lastFetched: 1000 },
+            bob: { pubkey: 'bob', derivedRelays: ['wss://relay1.com'], blockedRelays: [], lastFetched: 2000 },
+            charlie: { pubkey: 'charlie', derivedRelays: ['wss://relay1.com'], blockedRelays: [], lastFetched: 3000 }
+          };
+          
+          const result = DMLib.Pure.Relay.buildRelayToUsersMap(participants);
+          
+          expect(result.get('wss://relay1.com')).toEqual(['alice', 'bob', 'charlie']);
+        });
+
+        it('should handle realistic scenario with discovery relays', () => {
+          const participants = {
+            alice: { 
+              pubkey: 'alice', 
+              derivedRelays: ['wss://relay.damus.io', 'wss://nos.lol'], 
+              blockedRelays: [], 
+              lastFetched: 1000 
+            },
+            bob: { 
+              pubkey: 'bob', 
+              derivedRelays: ['wss://relay.nostr.band'], 
+              blockedRelays: [], 
+              lastFetched: 2000 
+            },
+            charlie: { 
+              pubkey: 'charlie', 
+              derivedRelays: ['wss://relay.damus.io'], 
+              blockedRelays: [], 
+              lastFetched: 3000 
+            }
+          };
+          
+          const result = DMLib.Pure.Relay.buildRelayToUsersMap(participants);
+          
+          expect(result.size).toBe(3);
+          expect(result.get('wss://relay.damus.io')).toEqual(['alice', 'charlie']);
+          expect(result.get('wss://nos.lol')).toEqual(['alice']);
+          expect(result.get('wss://relay.nostr.band')).toEqual(['bob']);
+        });
+
+        it('should handle participants with duplicate relay entries (shouldn\'t happen but handle gracefully)', () => {
+          const participants = {
+            alice: { 
+              pubkey: 'alice', 
+              derivedRelays: ['wss://relay1.com', 'wss://relay1.com'], 
+              blockedRelays: [], 
+              lastFetched: 1000 
+            }
+          };
+          
+          const result = DMLib.Pure.Relay.buildRelayToUsersMap(participants);
+          
+          expect(result.size).toBe(1);
+          expect(result.get('wss://relay1.com')).toEqual(['alice', 'alice']); // Will have duplicates if input has duplicates
+        });
+      });
+      
       it.todo('findNewRelaysToQuery');
       it.todo('computeAllQueriedRelays');
-      it.todo('buildRelayToUsersMap');
       it.todo('filterNewRelayUserCombos');
     });
 
