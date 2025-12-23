@@ -234,8 +234,25 @@ const buildRelayToUsersMap = (participants: Record<string, Participant>): Map<st
   
   return relayMap;
 }
-// TODO: Implement filterNewRelayUserCombos
-const filterNewRelayUserCombos = (relayUserMap: Map<string, string[]>, alreadyQueriedRelays: string[]): string[] => { return []; }
+/**
+ * Filters relay-user map to return only new relay URLs not yet queried
+ * 
+ * @param relayUserMap - Map of relay URL to array of pubkeys (from buildRelayToUsersMap)
+ * @param alreadyQueriedRelays - Relays we've already queried
+ * @returns Array of new relay URLs to query
+ */
+const filterNewRelayUserCombos = (relayUserMap: Map<string, string[]>, alreadyQueriedRelays: string[]): string[] => {
+  const alreadyQueriedSet = new Set(alreadyQueriedRelays);
+  const newRelays: string[] = [];
+  
+  for (const relayUrl of relayUserMap.keys()) {
+    if (!alreadyQueriedSet.has(relayUrl)) {
+      newRelays.push(relayUrl);
+    }
+  }
+  
+  return newRelays;
+}
 /**
  * Builds a Participant object from relay lists.
  * Uses deriveRelaySet to extract relays based on priority and relay mode.

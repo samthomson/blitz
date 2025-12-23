@@ -598,9 +598,135 @@ describe('DMLib', () => {
         });
       });
       
+      describe('filterNewRelayUserCombos', () => {
+        it('should return empty array when relayUserMap is empty', () => {
+          const relayUserMap = new Map<string, string[]>();
+          const alreadyQueried = ['wss://relay1.com'];
+          
+          const result = DMLib.Pure.Relay.filterNewRelayUserCombos(relayUserMap, alreadyQueried);
+          expect(result).toEqual([]);
+        });
+
+        it('should return all relays when alreadyQueried is empty', () => {
+          const relayUserMap = new Map<string, string[]>([
+            ['wss://relay1.com', ['alice']],
+            ['wss://relay2.com', ['bob']],
+            ['wss://relay3.com', ['charlie']]
+          ]);
+          
+          const result = DMLib.Pure.Relay.filterNewRelayUserCombos(relayUserMap, []);
+          
+          expect(result).toHaveLength(3);
+          expect(result).toContain('wss://relay1.com');
+          expect(result).toContain('wss://relay2.com');
+          expect(result).toContain('wss://relay3.com');
+        });
+
+        it('should return empty array when all relays already queried', () => {
+          const relayUserMap = new Map<string, string[]>([
+            ['wss://relay1.com', ['alice']],
+            ['wss://relay2.com', ['bob']]
+          ]);
+          const alreadyQueried = ['wss://relay1.com', 'wss://relay2.com'];
+          
+          const result = DMLib.Pure.Relay.filterNewRelayUserCombos(relayUserMap, alreadyQueried);
+          expect(result).toEqual([]);
+        });
+
+        it('should return only new relays', () => {
+          const relayUserMap = new Map<string, string[]>([
+            ['wss://relay1.com', ['alice']],
+            ['wss://relay2.com', ['bob']],
+            ['wss://relay3.com', ['charlie']],
+            ['wss://relay4.com', ['dave']]
+          ]);
+          const alreadyQueried = ['wss://relay1.com', 'wss://relay3.com'];
+          
+          const result = DMLib.Pure.Relay.filterNewRelayUserCombos(relayUserMap, alreadyQueried);
+          
+          expect(result).toHaveLength(2);
+          expect(result).toContain('wss://relay2.com');
+          expect(result).toContain('wss://relay4.com');
+          expect(result).not.toContain('wss://relay1.com');
+          expect(result).not.toContain('wss://relay3.com');
+        });
+
+        it('should handle single new relay', () => {
+          const relayUserMap = new Map<string, string[]>([
+            ['wss://relay1.com', ['alice']],
+            ['wss://relay2.com', ['bob']]
+          ]);
+          const alreadyQueried = ['wss://relay1.com'];
+          
+          const result = DMLib.Pure.Relay.filterNewRelayUserCombos(relayUserMap, alreadyQueried);
+          
+          expect(result).toEqual(['wss://relay2.com']);
+        });
+
+        it('should not care about users in the map, only relay URLs', () => {
+          const relayUserMap = new Map<string, string[]>([
+            ['wss://relay1.com', ['alice', 'bob', 'charlie']],
+            ['wss://relay2.com', ['dave']]
+          ]);
+          const alreadyQueried = ['wss://relay1.com'];
+          
+          const result = DMLib.Pure.Relay.filterNewRelayUserCombos(relayUserMap, alreadyQueried);
+          
+          expect(result).toEqual(['wss://relay2.com']);
+        });
+
+        it('should handle alreadyQueried with relays not in map', () => {
+          const relayUserMap = new Map<string, string[]>([
+            ['wss://relay1.com', ['alice']],
+            ['wss://relay2.com', ['bob']]
+          ]);
+          const alreadyQueried = ['wss://relay99.com', 'wss://relay1.com'];
+          
+          const result = DMLib.Pure.Relay.filterNewRelayUserCombos(relayUserMap, alreadyQueried);
+          
+          expect(result).toEqual(['wss://relay2.com']);
+        });
+
+        it('should handle realistic scenario from Step I', () => {
+          // After steps A-H, we have participants with their relays
+          // Build relay map shows which users are on which relays
+          const relayUserMap = new Map<string, string[]>([
+            ['wss://relay.damus.io', ['alice', 'charlie']],
+            ['wss://nos.lol', ['alice']],
+            ['wss://relay.nostr.band', ['bob']],
+            ['wss://inbox.nostr.wine', ['charlie']],
+            ['wss://new-relay.com', ['dave']]
+          ]);
+          
+          // We already queried these relays in step C
+          const alreadyQueried = ['wss://relay.damus.io', 'wss://nos.lol', 'wss://relay.nostr.band'];
+          
+          const result = DMLib.Pure.Relay.filterNewRelayUserCombos(relayUserMap, alreadyQueried);
+          
+          // Should return only the relays we haven't queried yet
+          expect(result).toHaveLength(2);
+          expect(result).toContain('wss://inbox.nostr.wine');
+          expect(result).toContain('wss://new-relay.com');
+        });
+
+        it('should handle empty alreadyQueried with complex map', () => {
+          const relayUserMap = new Map<string, string[]>([
+            ['wss://relay1.com', ['alice', 'bob']],
+            ['wss://relay2.com', ['charlie']],
+            ['wss://relay3.com', ['dave', 'eve', 'frank']]
+          ]);
+          
+          const result = DMLib.Pure.Relay.filterNewRelayUserCombos(relayUserMap, []);
+          
+          expect(result).toHaveLength(3);
+          expect(result).toContain('wss://relay1.com');
+          expect(result).toContain('wss://relay2.com');
+          expect(result).toContain('wss://relay3.com');
+        });
+      });
+      
       it.todo('findNewRelaysToQuery');
       it.todo('computeAllQueriedRelays');
-      it.todo('filterNewRelayUserCombos');
     });
 
     describe('Message', () => {
