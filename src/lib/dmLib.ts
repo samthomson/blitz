@@ -9,6 +9,7 @@ import type {
   MessagingState,
   RelayMode,
   RelayListsResult,
+  RelayInfo,
 } from '@/lib/dmTypes';
 
 export const CACHE_DB_NAME = 'nostr-dm-cache-v2';
@@ -19,6 +20,33 @@ const DM_QUERY_CONSTANTS = {
   BATCH_SIZE: 1000,
   QUERY_TIMEOUT_MS: 30000, // 30 seconds
 } as const;
+
+/**
+ * Merges two RelayInfo maps, combining status for overlapping relays.
+ * Prefers newer data for errors, OR's success flags.
+ * 
+ * @param olderRelayInfo - First relay info map (older)
+ * @param newerRelayInfo - Second relay info map (newer)
+ * @returns New merged map with combined status
+ */
+const mergeRelayInfo = (olderRelayInfo: Map<string, RelayInfo>, newerRelayInfo: Map<string, RelayInfo>): Map<string, RelayInfo> => {
+  const merged = new Map(olderRelayInfo);
+  
+  for (const [relay, info] of newerRelayInfo.entries()) {
+    if (!merged.has(relay)) {
+      merged.set(relay, { ...info });
+    } else {
+      const existing = merged.get(relay)!;
+      // If either query succeeded, mark as succeeded
+      existing.lastQuerySucceeded = existing.lastQuerySucceeded || info.lastQuerySucceeded;
+      // Prefer newer error
+      existing.lastQueryError = info.lastQueryError || existing.lastQueryError;
+      // isBlocked is set later from participant data, not from queries
+    }
+  }
+  
+  return merged;
+};
 
 export interface Signer {
   nip04?: {
@@ -438,11 +466,13 @@ const enrichMessagesWithConversationId = (messagesWithMetadata: MessageWithMetad
  * @returns Complete MessagingState ready for use and caching
  */
 const buildMessagingAppState = (
+  myPubkey: string,
   participants: Record<string, Participant>,
   messagesFromInitialQuery: MessageWithMetadata[],
   messagesFromGapFilling: MessageWithMetadata[],
   queriedRelays: string[],
-  queryLimitReached: boolean
+  queryLimitReached: boolean,
+  relayInfoMap: Map<string, RelayInfo>
 ): MessagingState => {
   // 1. Convert MessageWithMetadata to Message (add conversationId + protocol)
   const enrichedInitial = enrichMessagesWithConversationId(messagesFromInitialQuery);
@@ -498,16 +528,27 @@ const buildMessagingAppState = (
     queryLimitReached,
   };
   
-  // 6. Build relayInfo (currently placeholder - will be populated when relay health tracking is implemented)
-  // TODO: Track relay query success/failure to show users which relays are working in conversation UI
+  // 6. Convert relayInfo map to record and mark blocked relays
   const relayInfo: Record<string, RelayInfo> = {};
+  
+  for (const [relay, info] of relayInfoMap.entries()) {
+    relayInfo[relay] = { ...info };
+  }
+  
+  // Mark relays that the current user has blocked
+  const myBlockedRelays = participants[myPubkey]?.blockedRelays || [];
+  for (const blockedRelay of myBlockedRelays) {
+    if (relayInfo[blockedRelay]) {
+      relayInfo[blockedRelay].isBlocked = true;
+    }
+  }
   
   return {
     participants,
     conversationMetadata,
     conversationMessages,
     syncState,
-    relayInfo, // Empty for now, will be populated with relay health tracking later
+    relayInfo,
   };
 }
 /**
@@ -580,6 +621,7 @@ export const Pure = {
     computeAllQueriedRelays,
     buildRelayToUsersMap,
     filterNewRelayUserCombos,
+    mergeRelayInfo,
   },
   Message: {
     dedupeMessages,
@@ -688,7 +730,7 @@ const fetchMessages = async (
   myPubkey: string,
   since: number | null,
   queryLimit: number
-): Promise<{ messages: NostrEvent[]; limitReached: boolean }> => {
+): Promise<{ messages: NostrEvent[]; limitReached: boolean; relayInfo: Map<string, RelayInfo> }> => {
   const { BATCH_SIZE, QUERY_TIMEOUT_MS } = DM_QUERY_CONSTANTS;
   
   // Initialize 3 separate filter states for independent pagination
@@ -700,6 +742,9 @@ const fetchMessages = async (
   
   const allMessages: NostrEvent[] = [];
   let totalCollected = 0;
+  
+  // Track relay info across all queries
+  const relayInfo = new Map<string, RelayInfo>();
   
   // Iterate until all filters exhausted or limit reached
   while (totalCollected < queryLimit) {
@@ -724,13 +769,31 @@ const fetchMessages = async (
       const relayResults = await Promise.allSettled(
         relays.map(relay =>
           nostr.relay(relay).query([filter], { signal: AbortSignal.timeout(QUERY_TIMEOUT_MS) })
+            .then(events => ({ relay, success: true, events, error: null }))
+            .catch(error => ({ relay, success: false, events: [], error: String(error) }))
         )
       );
       
+      // Track relay info
+      for (const result of relayResults) {
+        if (result.status === 'fulfilled') {
+          const { relay, success, error } = result.value;
+          if (!relayInfo.has(relay)) {
+            relayInfo.set(relay, { lastQuerySucceeded: false, lastQueryError: null, isBlocked: false });
+          }
+          const info = relayInfo.get(relay)!;
+          if (success) {
+            info.lastQuerySucceeded = true;
+          } else {
+            info.lastQueryError = error;
+          }
+        }
+      }
+      
       // Combine results from all relays (ignore failures)
       const messages = relayResults
-        .filter((r): r is PromiseFulfilledResult<NostrEvent[]> => r.status === 'fulfilled')
-        .flatMap(r => r.value);
+        .filter((r): r is PromiseFulfilledResult<{ relay: string; success: boolean; events: NostrEvent[]; error: string | null }> => r.status === 'fulfilled')
+        .flatMap(r => r.value.events);
       
       // Deduplicate by event ID (same message from multiple relays)
       const seen = new Set<string>();
@@ -773,7 +836,8 @@ const fetchMessages = async (
   
   return {
     messages: allMessages,
-    limitReached: totalCollected >= queryLimit
+    limitReached: totalCollected >= queryLimit,
+    relayInfo
   };
 }
 /**
@@ -1023,14 +1087,14 @@ const queryMessages = async (
   myPubkey: string,
   since: number | null,
   queryLimit: number
-): Promise<{ messagesWithMetadata: MessageWithMetadata[]; limitReached: boolean }> => {
+): Promise<{ messagesWithMetadata: MessageWithMetadata[]; limitReached: boolean; relayInfo: Map<string, RelayInfo> }> => {
   // Fetch raw messages (batched iteration with 3 filters)
-  const { messages, limitReached } = await fetchMessages(nostr, relays, myPubkey, since, queryLimit);
+  const { messages, limitReached, relayInfo } = await fetchMessages(nostr, relays, myPubkey, since, queryLimit);
   
   // Decrypt all messages (NIP-04 and NIP-17)
   const messagesWithMetadata = await decryptAllMessages(messages, signer, myPubkey);
   
-  return { messagesWithMetadata, limitReached };
+  return { messagesWithMetadata, limitReached, relayInfo };
 }
 /**
  * Fetches relay lists for new pubkeys and merges them with existing participants.
@@ -1081,14 +1145,14 @@ const queryNewRelays = async (
   relays: string[],
   myPubkey: string,
   queryLimit: number
-): Promise<{ allMessages: MessageWithMetadata[]; limitReached: boolean }> => {
+): Promise<{ allMessages: MessageWithMetadata[]; limitReached: boolean; relayInfo: Map<string, RelayInfo> }> => {
   // Fetch raw messages from beginning (since=null for gap filling)
-  const { messages, limitReached } = await fetchMessages(nostr, relays, myPubkey, null, queryLimit);
+  const { messages, limitReached, relayInfo } = await fetchMessages(nostr, relays, myPubkey, null, queryLimit);
   
   // Decrypt all messages (NIP-04 and NIP-17)
   const allMessages = await decryptAllMessages(messages, signer, myPubkey);
   
-  return { allMessages, limitReached };
+  return { allMessages, limitReached, relayInfo };
 }
 /**
  * Builds the complete MessagingState and saves it to cache
@@ -1108,15 +1172,18 @@ const buildAndSaveCache = async (
   messagesFromInitialQuery: MessageWithMetadata[],
   messagesFromGapFilling: MessageWithMetadata[],
   allQueriedRelays: string[],
-  limitReached: boolean
+  limitReached: boolean,
+  relayInfoMap: Map<string, RelayInfo>
 ): Promise<MessagingState> => {
   // Build the complete app state
   const state = buildMessagingAppState(
+    myPubkey,
     participants,
     messagesFromInitialQuery,
     messagesFromGapFilling,
     allQueriedRelays,
-    limitReached
+    limitReached,
+    relayInfoMap
   );
   
   // Save to cache

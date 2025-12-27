@@ -2905,7 +2905,7 @@ describe('DMLib', () => {
         });
 
         it('should build empty state for no data', () => {
-          const result = DMLib.Pure.Sync.buildMessagingAppState({}, [], [], [], false);
+          const result = DMLib.Pure.Sync.buildMessagingAppState('alice', {}, [], [], [], false, new Map());
 
           expect(result.participants).toEqual({});
           expect(result.conversationMetadata).toEqual({});
@@ -2922,7 +2922,7 @@ describe('DMLib', () => {
             bob: createParticipant('bob', ['wss://relay3.com'])
           };
 
-          const result = DMLib.Pure.Sync.buildMessagingAppState(participants, [], [], [], false);
+          const result = DMLib.Pure.Sync.buildMessagingAppState('alice', participants, [], [], [], false, new Map());
 
           expect(result.participants).toEqual(participants);
         });
@@ -2939,7 +2939,7 @@ describe('DMLib', () => {
             createMessageWithMetadata('msg3', ['alice', 'charlie'], '', 'nip17', 300)
           ];
 
-          const result = DMLib.Pure.Sync.buildMessagingAppState(participants, messages, [], [], false);
+          const result = DMLib.Pure.Sync.buildMessagingAppState('alice', participants, messages, [], [], false, new Map());
 
           expect(Object.keys(result.conversationMessages)).toHaveLength(2);
           expect(result.conversationMessages['group:alice,bob:']).toHaveLength(2);
@@ -2957,7 +2957,7 @@ describe('DMLib', () => {
             createMessageWithMetadata('msg2', ['alice', 'bob'], '', 'nip04', 200)
           ];
 
-          const result = DMLib.Pure.Sync.buildMessagingAppState(participants, messages, [], [], false);
+          const result = DMLib.Pure.Sync.buildMessagingAppState('alice', participants, messages, [], [], false, new Map());
 
           const conv = result.conversationMetadata['group:alice,bob:'];
           expect(conv.id).toBe('group:alice,bob:');
@@ -2982,7 +2982,7 @@ describe('DMLib', () => {
             createMessageWithMetadata('msg1', ['alice', 'bob'], 'Meeting', 'nip17', 100)
           ];
 
-          const result = DMLib.Pure.Sync.buildMessagingAppState(participants, messages, [], [], false);
+          const result = DMLib.Pure.Sync.buildMessagingAppState('alice', participants, messages, [], [], false, new Map());
 
           const conv = result.conversationMetadata['group:alice,bob:Meeting'];
           expect(conv.subject).toBe('Meeting');
@@ -3000,7 +3000,7 @@ describe('DMLib', () => {
             createMessageWithMetadata('msg2', ['alice', 'bob'], '', 'nip17', 200)
           ];
 
-          const result = DMLib.Pure.Sync.buildMessagingAppState(participants, messages, [], [], false);
+          const result = DMLib.Pure.Sync.buildMessagingAppState('alice', participants, messages, [], [], false, new Map());
 
           const conv = result.conversationMetadata['group:alice,bob:'];
           expect(conv.hasNIP04).toBe(true);
@@ -3013,7 +3013,7 @@ describe('DMLib', () => {
           const queryLimitReached = true;
 
           const before = Date.now();
-          const result = DMLib.Pure.Sync.buildMessagingAppState(participants, [], [], queriedRelays, queryLimitReached);
+          const result = DMLib.Pure.Sync.buildMessagingAppState('alice', participants, [], [], queriedRelays, queryLimitReached, new Map());
           const after = Date.now();
 
           expect(result.syncState.lastCacheTime).toBeGreaterThanOrEqual(before);
@@ -3028,7 +3028,7 @@ describe('DMLib', () => {
             bob: createParticipant('bob', ['wss://relay2.com', 'wss://relay3.com'])
           };
 
-          const result = DMLib.Pure.Sync.buildMessagingAppState(participants, [], [], [], false);
+          const result = DMLib.Pure.Sync.buildMessagingAppState('alice', participants, [], [], [], false, new Map());
 
           // relayInfo is now empty (placeholder for future relay health tracking)
           expect(Object.keys(result.relayInfo)).toHaveLength(0);
@@ -3039,7 +3039,7 @@ describe('DMLib', () => {
             alice: createParticipant('alice', ['wss://relay1.com', 'wss://relay2.com'], ['wss://relay2.com'])
           };
 
-          const result = DMLib.Pure.Sync.buildMessagingAppState(participants, [], [], [], false);
+          const result = DMLib.Pure.Sync.buildMessagingAppState('alice', participants, [], [], [], false, new Map());
 
           // relayInfo is now empty (placeholder for future relay health tracking)
           expect(Object.keys(result.relayInfo)).toHaveLength(0);
@@ -3056,7 +3056,7 @@ describe('DMLib', () => {
             createMessageWithMetadata('msg1', ['alice', 'bob', 'charlie'], '', 'nip17', 100)
           ];
 
-          const result = DMLib.Pure.Sync.buildMessagingAppState(participants, messages, [], [], false);
+          const result = DMLib.Pure.Sync.buildMessagingAppState('alice', participants, messages, [], [], false, new Map());
 
           const conv = result.conversationMetadata['group:alice,bob,charlie:'];
           expect(conv.participantPubkeys).toEqual(['alice', 'bob', 'charlie']);
@@ -3075,7 +3075,7 @@ describe('DMLib', () => {
             createMessageWithMetadata('msg3', ['bob', 'charlie'], '', 'nip04', 300)
           ];
 
-          const result = DMLib.Pure.Sync.buildMessagingAppState(participants, messages, [], [], false);
+          const result = DMLib.Pure.Sync.buildMessagingAppState('alice', participants, messages, [], [], false, new Map());
 
           expect(Object.keys(result.conversationMetadata)).toHaveLength(3);
           expect(Object.keys(result.conversationMessages)).toHaveLength(3);
@@ -3093,7 +3093,7 @@ describe('DMLib', () => {
             createMessageWithMetadata('msg3', ['alice', 'bob'], '', 'nip04', 300)
           ];
 
-          const result = DMLib.Pure.Sync.buildMessagingAppState(participants, messages, [], [], false);
+          const result = DMLib.Pure.Sync.buildMessagingAppState('alice', participants, messages, [], [], false, new Map());
 
           expect(result.conversationMetadata['group:alice,bob:'].lastActivity).toBe(500);
         });
@@ -3110,7 +3110,7 @@ describe('DMLib', () => {
             createMessageWithMetadata('msg3', ['alice', 'bob'], '', 'nip04', 200, 'middle')
           ];
 
-          const result = DMLib.Pure.Sync.buildMessagingAppState(participants, messages, [], [], false);
+          const result = DMLib.Pure.Sync.buildMessagingAppState('alice', participants, messages, [], [], false, new Map());
 
           expect(result.conversationMetadata['group:alice,bob:'].lastMessage?.decryptedContent).toBe('last');
         });
@@ -3131,7 +3131,7 @@ describe('DMLib', () => {
 
           const queriedRelays = ['wss://relay1.com', 'wss://relay2.com', 'wss://relay3.com'];
 
-          const result = DMLib.Pure.Sync.buildMessagingAppState(participants, messages, [], queriedRelays, false);
+          const result = DMLib.Pure.Sync.buildMessagingAppState('alice', participants, messages, [], queriedRelays, false, new Map());
 
           // Check participants preserved
           expect(Object.keys(result.participants)).toHaveLength(3);
@@ -3159,7 +3159,7 @@ describe('DMLib', () => {
           const participants = { alice: createParticipant('alice') };
           const messages = [createMessageWithMetadata('msg1', [], '', 'nip04', 100)];
 
-          const result = DMLib.Pure.Sync.buildMessagingAppState(participants, messages, [], [], false);
+          const result = DMLib.Pure.Sync.buildMessagingAppState('alice', participants, messages, [], [], false, new Map());
 
           const conv = result.conversationMetadata['group::'];
           expect(conv.participantPubkeys).toEqual([]); // Empty string splits to empty array

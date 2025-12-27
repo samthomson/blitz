@@ -54,7 +54,7 @@ const initialiseMessaging = async (nostr: NPool, signer: Signer, myPubkey: strin
   // C. Query messages (use current user's relays from participants)
   console.log('[NewDM] C. Querying messages...');
   const since = mode === DMLib.StartupMode.WARM ? DMLib.Pure.Sync.computeSinceTimestamp(cached.syncState.lastCacheTime, 2) : null;
-  const { messagesWithMetadata, limitReached: isLimitReachedDuringInitialQuery } = await DMLib.Impure.Message.queryMessages(nostr, signer, baseParticipants[myPubkey].derivedRelays, myPubkey, since, settings.queryLimit);
+  const { messagesWithMetadata, limitReached: isLimitReachedDuringInitialQuery, relayInfo: relayInfoFromInitial } = await DMLib.Impure.Message.queryMessages(nostr, signer, baseParticipants[myPubkey].derivedRelays, myPubkey, since, settings.queryLimit);
   
   // Detailed logging for debugging
   const nip04Count = messagesWithMetadata.filter(m => m.event.kind === 4).length;
@@ -104,19 +104,23 @@ const initialiseMessaging = async (nostr: NPool, signer: Signer, myPubkey: strin
   console.log('[NewDM] H. New relays to query:', newRelays);
   
   // I. Query new relays
-  const { allMessages: messagesFromGapFilling, limitReached: isLimitReachedDuringGapQuery } = await DMLib.Impure.Message.queryNewRelays(nostr, signer, newRelays, myPubkey, settings.queryLimit);
+  const { allMessages: messagesFromGapFilling, limitReached: isLimitReachedDuringGapQuery, relayInfo: relayInfoFromGapFilling } = await DMLib.Impure.Message.queryNewRelays(nostr, signer, newRelays, myPubkey, settings.queryLimit);
   console.log('[NewDM] I. Gap-filling messages:', messagesFromGapFilling.length);
   
-  // J. Build and save
+  // J. Merge relay info from both query phases
+  const combinedRelayInfo = DMLib.Pure.Relay.mergeRelayInfo(relayInfoFromInitial, relayInfoFromGapFilling);
+  
+  // K. Build and save
   const allQueriedRelays = DMLib.Pure.Relay.computeAllQueriedRelays(mode, cached, participants[myPubkey].derivedRelays, newRelays);
-  console.log('[NewDM] J. Building and saving state...');
+  console.log('[NewDM] K. Building and saving state...');
   return await DMLib.Impure.Cache.buildAndSaveCache(
     myPubkey,
     participants,
     messagesWithMetadata,
     messagesFromGapFilling,
     allQueriedRelays,
-    isLimitReachedDuringInitialQuery || isLimitReachedDuringGapQuery
+    isLimitReachedDuringInitialQuery || isLimitReachedDuringGapQuery,
+    combinedRelayInfo
   );
 }
 

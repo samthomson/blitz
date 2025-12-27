@@ -9,9 +9,9 @@ export function Test() {
   const { messagingState, isLoading } = useNewDMContext();
   const [relayDetailsOpen, setRelayDetailsOpen] = useState(false);
 
-  // Build relay-to-users mapping
-  const relayData = useMemo(() => {
-    if (!messagingState) return [];
+  // Build relay-to-users mapping and calculate failed count
+  const { relayData, failedRelayCount } = useMemo(() => {
+    if (!messagingState) return { relayData: [], failedRelayCount: 0 };
 
     const relayMap = new Map<string, string[]>();
     
@@ -25,9 +25,16 @@ export function Test() {
     }
 
     // Convert to array and sort by user count
-    return Array.from(relayMap.entries())
+    const data = Array.from(relayMap.entries())
       .map(([relay, users]) => ({ relay, users, count: users.length }))
       .sort((a, b) => b.count - a.count);
+
+    // Count failed relays
+    const failed = Object.values(messagingState.relayInfo).filter(
+      info => !info.lastQuerySucceeded
+    ).length;
+
+    return { relayData: data, failedRelayCount: failed };
   }, [messagingState]);
 
   return (
@@ -40,7 +47,7 @@ export function Test() {
       {/* Debug Info */}
       <Card className="mb-4 bg-muted/50">
         <CardContent className="py-3 px-4">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
             <div>
               <span className="text-muted-foreground">Status:</span>{' '}
               <span className="font-mono">{isLoading ? '⏳ Loading...' : '✅ Ready'}</span>
@@ -57,6 +64,10 @@ export function Test() {
               <span className="text-muted-foreground">Queried Relays:</span>{' '}
               <span className="font-mono">{messagingState?.syncState.queriedRelays.length || 0}</span>
             </div>
+            <div>
+              <span className="text-muted-foreground">Failed Relays:</span>{' '}
+              <span className="font-mono text-red-500">{failedRelayCount}</span>
+            </div>
           </div>
 
           {/* Expandable Relay Details */}
@@ -70,12 +81,21 @@ export function Test() {
                 <div className="max-h-96 overflow-y-auto space-y-2">
                   {relayData.map(({ relay, users, count }) => {
                     const wasQueried = messagingState.syncState.queriedRelays.includes(relay);
+                    const health = messagingState.relayInfo[relay];
+                    const succeeded = health?.lastQuerySucceeded ?? false;
+                    const failed = health && !health.lastQuerySucceeded;
+                    const icon = !wasQueried ? '⚪' : succeeded ? '✅' : '❌';
                     
                     return (
                       <div key={relay} className="border rounded p-3 bg-background text-xs">
                         <div className="flex items-start justify-between gap-2 mb-2">
                           <div className="font-mono text-xs break-all flex-1">
-                            {wasQueried ? '✅' : '⚪'} {relay}
+                            {icon} {relay}
+                            {failed && health.lastQueryError && (
+                              <div className="text-red-500 text-[10px] mt-1">
+                                Error: {health.lastQueryError.substring(0, 100)}
+                              </div>
+                            )}
                           </div>
                           <div className="text-muted-foreground whitespace-nowrap">
                             {count} user{count !== 1 ? 's' : ''}
@@ -98,7 +118,7 @@ export function Test() {
                   })}
                 </div>
                 <p className="text-xs text-muted-foreground mt-3">
-                  ✅ = Queried in this session • ⚪ = Not queried (participant's relay but not needed)
+                  ✅ = Successfully connected • ❌ = Connection failed • ⚪ = Not queried (participant's relay but not needed)
                 </p>
               </CollapsibleContent>
             </Collapsible>
