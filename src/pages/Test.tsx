@@ -85,11 +85,11 @@ export function Test() {
               <div className="grid grid-cols-2 md:grid-cols-5 gap-2 text-xs">
                 <div>
                   <span className="text-muted-foreground">Total:</span>{' '}
-                  <span className="font-mono font-bold">{(timing.total / 1000).toFixed(2)}s</span>
+                  <span className="font-mono font-bold">{timing.total ? `${(timing.total / 1000).toFixed(2)}s` : '-'}</span>
                 </div>
                 <div>
                   <span className="text-muted-foreground">Cache:</span>{' '}
-                  <span className="font-mono">{timing.loadCache}ms</span>
+                  <span className="font-mono">{timing.loadCache ? `${timing.loadCache}ms` : '-'}</span>
                 </div>
                 <div>
                   <span className="text-muted-foreground">Fetch Relays:</span>{' '}
@@ -101,7 +101,7 @@ export function Test() {
                 </div>
                 <div>
                   <span className="text-muted-foreground">Query Msgs:</span>{' '}
-                  <span className="font-mono">{(timing.queryMessages / 1000).toFixed(2)}s</span>
+                  <span className="font-mono">{timing.queryMessages ? `${(timing.queryMessages / 1000).toFixed(2)}s` : '-'}</span>
                 </div>
                 <div>
                   <span className="text-muted-foreground">Fetch Parts:</span>{' '}
@@ -113,7 +113,7 @@ export function Test() {
                 </div>
                 <div>
                   <span className="text-muted-foreground">Build State:</span>{' '}
-                  <span className="font-mono">{timing.buildAndSave}ms</span>
+                  <span className="font-mono">{timing.buildAndSave ? `${timing.buildAndSave}ms` : '-'}</span>
                 </div>
                 {messagingState?.syncState.lastCacheTime && (
                   <div className="col-span-2">
