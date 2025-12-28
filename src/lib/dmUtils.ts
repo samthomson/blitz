@@ -117,6 +117,9 @@ export function createConversationId(allParticipants: string[]): string {
   return `group:${uniqueSorted.join(',')}`;
 }
 
+// TODO: This old parser will be replaced by the new dmLib.computeConversationId format
+// The new system (NewDMContext) uses "group:pubkeys:subject" format consistently
+// This old parser is only used by the legacy DMContext.tsx
 /**
  * Parse a conversation ID to get all participant pubkeys.
  * 

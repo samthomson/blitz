@@ -60,10 +60,14 @@ export interface Signer {
 }
 
 export interface MessageWithMetadata {
-  event: NostrEvent;
+  event: NostrEvent; // The inner message (kind 4, 14, or 15) with DECRYPTED content
   senderPubkey?: string;
   participants?: string[];
   subject?: string;
+  // NIP-17 debugging - store the encrypted layers
+  sealEvent?: NostrEvent; // For NIP-17: the kind 13 seal (encrypted)
+  giftWrapEvent?: NostrEvent; // For NIP-17: the full kind 1059 gift wrap
+  giftWrapId?: string; // For NIP-17: gift wrap ID for deduplication
 }
 
 export enum StartupMode {
@@ -275,6 +279,33 @@ const computeConversationId = (participantPubkeys: string[], subject: string): s
   // This makes parsing simple and consistent everywhere
   return `group:${uniqueSorted.join(',')}:${subject}`;
 }
+
+/**
+ * Parses a conversation ID to extract participant pubkeys and subject
+ * Format: "group:pubkey1,pubkey2:subject"
+ * 
+ * @param conversationId - The conversation ID in format "group:pubkey1,pubkey2:subject"
+ * @returns Object with participantPubkeys array and subject string
+ */
+export const parseConversationId = (conversationId: string): { participantPubkeys: string[]; subject: string } => {
+  if (!conversationId.startsWith('group:')) {
+    throw new Error(`Invalid conversation ID format: ${conversationId}`);
+  }
+  
+  const withoutPrefix = conversationId.substring(6); // Remove "group:"
+  const lastColonIndex = withoutPrefix.lastIndexOf(':');
+  
+  if (lastColonIndex === -1) {
+    throw new Error(`Invalid conversation ID format (missing subject separator): ${conversationId}`);
+  }
+  
+  const participantsString = withoutPrefix.substring(0, lastColonIndex);
+  const subject = withoutPrefix.substring(lastColonIndex + 1);
+  const participantPubkeys = participantsString.split(',');
+  
+  return { participantPubkeys, subject };
+}
+
 /**
  * Groups messages into conversations by their conversationId
  * 
@@ -447,10 +478,13 @@ const determineNewPubkeys = (foundPubkeys: string[], existingPubkeys: string[], 
 const enrichMessagesWithConversationId = (messagesWithMetadata: MessageWithMetadata[]): Message[] => {
   return messagesWithMetadata.map(msg => ({
     id: msg.event.id,
-    event: msg.event,
+    event: msg.event, // The inner message with DECRYPTED content
     conversationId: computeConversationId(msg.participants || [], msg.subject || ''),
     protocol: msg.event.kind === 4 ? 'nip04' : 'nip17',
-    giftWrapId: msg.event.kind === 1059 ? msg.event.id : undefined,
+    // NIP-17 debugging - copy over encrypted layers
+    giftWrapId: msg.giftWrapId,
+    sealEvent: msg.sealEvent,
+    giftWrapEvent: msg.giftWrapEvent,
   }));
 };
 
@@ -929,10 +963,14 @@ const processNIP17Message = async (msg: NostrEvent, signer: Signer): Promise<Mes
     const subject = inner.tags.find(t => t[0] === 'subject')?.[1] || '';
     
     return {
-      event: inner, // Store the INNER event (kind 14/15), not the gift wrap
+      event: inner, // Store the INNER event (kind 14/15) with DECRYPTED content
       senderPubkey: seal.pubkey, // Real sender is in the seal
       participants,
-      subject
+      subject,
+      // Store encrypted layers for debugging
+      sealEvent: seal, // Kind 13 with encrypted content
+      giftWrapEvent: msg, // Kind 1059 with encrypted seal
+      giftWrapId: msg.id // For deduplication
     };
   } catch (error) {
     // Silently skip gift wraps we can't decrypt

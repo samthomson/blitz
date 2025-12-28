@@ -1,13 +1,14 @@
 import { useState, useRef, useEffect, useCallback, memo, useMemo } from 'react';
 import { useConversationMessages, useNewDMContext } from '@/contexts/NewDMContext';
-import type { DecryptedMessage } from '@/contexts/DMContext';
+import type { Message } from '@/lib/dmTypes';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useAuthor } from '@/hooks/useAuthor';
 import { useAuthorsBatch } from '@/hooks/useAuthorsBatch';
 import { useAppContext } from '@/hooks/useAppContext';
 import { MESSAGE_PROTOCOL, PROTOCOL_MODE, type MessageProtocol } from '@/lib/dmConstants';
 import { getDisplayName } from '@/lib/genUserName';
-import { formatConversationTime, formatFullDateTime, parseConversationId, getPubkeyColor } from '@/lib/dmUtils';
+import { formatConversationTime, formatFullDateTime, getPubkeyColor } from '@/lib/dmUtils';
+import { parseConversationId } from '@/lib/dmLib';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -33,7 +34,7 @@ const RawEventModal = ({
   innerEvent,
   giftWrapEvent,
   open, 
-  onOpenChange 
+  onOpenChange
 }: {
   outerEvent: NostrEvent;
   innerEvent?: NostrEvent;
@@ -41,7 +42,8 @@ const RawEventModal = ({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) => {
-  const isNIP17 = outerEvent.kind === 13 && innerEvent;
+  // NIP-17 has a seal (kind 13) wrapping the inner message
+  const isNIP17 = outerEvent.kind === 13 && !!innerEvent;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -76,9 +78,15 @@ const RawEventModal = ({
               )}
             </TabsContent>
             <TabsContent value="seal" className="flex-1 mt-4 overflow-auto">
-              <pre className="text-xs bg-muted p-4 rounded-md">
-                <code>{JSON.stringify(outerEvent, null, 2)}</code>
-              </pre>
+              {outerEvent.kind === 13 ? (
+                <pre className="text-xs bg-muted p-4 rounded-md">
+                  <code>{JSON.stringify(outerEvent, null, 2)}</code>
+                </pre>
+              ) : (
+                <div className="p-4 text-muted-foreground text-sm">
+                  Seal (kind 13) not available for this message
+                </div>
+              )}
             </TabsContent>
             <TabsContent value="inner" className="flex-1 mt-4 overflow-auto">
               <pre className="text-xs bg-muted p-4 rounded-md">
@@ -104,7 +112,7 @@ const MessageBubble = memo(({
   showSenderName = false,
   devMode = false,
 }: {
-  message: DecryptedMessage;
+  message: Message;
   isFromCurrentUser: boolean;
   showSenderName?: boolean;
   devMode?: boolean;
@@ -112,51 +120,28 @@ const MessageBubble = memo(({
   const [showRawEvent, setShowRawEvent] = useState(false);
   const { config } = useAppContext();
   
-  // For NIP-17, use inner message kind (14/15); for NIP-04, use message kind (4)
-  const actualKind = message.decryptedEvent?.kind || message.kind;
-  const isNIP4Message = message.kind === 4;
-  const isNIP17Message = message.kind === 13 && message.decryptedEvent; // Kind 13 = seal
+  // Access the actual event (kind 4, 14, or 15 with decrypted content)
+  const event = message.event;
+  const actualKind = event.kind;
+  const isNIP4Message = message.protocol === 'nip04';
+  const isNIP17Message = message.protocol === 'nip17';
   const isFileAttachment = actualKind === 15; // Kind 15 = files/attachments
   const renderInlineMedia = config.renderInlineMedia ?? true;
   const shouldRenderMedia = isFileAttachment || renderInlineMedia;
 
   // Check if it's an encrypted file attachment
-  const eventToCheck = message.decryptedEvent || message;
-  const hasEncryption = isFileAttachment && eventToCheck.tags.some(
+  const hasEncryption = isFileAttachment && event.tags.some(
     ([tagName]) => tagName === 'encryption-algorithm' || tagName === 'decryption-key'
   );
 
   // Fetch sender profile for group chats
-  const senderProfile = useAuthor(message.pubkey);
+  const senderProfile = useAuthor(event.pubkey);
   const metadata = senderProfile.data?.metadata;
-  const senderName = getDisplayName(message.pubkey, metadata);
-  const senderColor = getPubkeyColor(message.pubkey);
+  const senderName = getDisplayName(event.pubkey, metadata);
+  const senderColor = getPubkeyColor(event.pubkey);
 
-  // Create a NostrEvent object for NoteContent (only used for kind 15)
-  // For NIP-17 file attachments, use the decryptedEvent which has the actual tags
-  const messageEvent: NostrEvent = message.decryptedEvent || {
-    ...(message.id && { id: message.id }),
-    pubkey: message.pubkey,
-    created_at: message.created_at,
-    kind: message.kind,
-    tags: message.tags,
-    content: message.decryptedContent || '',
-    ...(message.sig && { sig: message.sig }),
-  } as NostrEvent;
-
-  // For dev modal: reconstruct the outer event
-  // For NIP-17 this is the Seal (kind 13) with encrypted content (no id/sig)
-  // For NIP-04 this is the Kind 4 event with encrypted content (has id/sig)
-  const messageAsEvent = message as DecryptedMessage;
-  const outerEvent = {
-    ...(messageAsEvent.id && { id: messageAsEvent.id }),
-    pubkey: messageAsEvent.pubkey,
-    created_at: messageAsEvent.created_at,
-    kind: messageAsEvent.kind,
-    tags: messageAsEvent.tags,
-    content: messageAsEvent.content || '', // Encrypted content as stored
-    ...(messageAsEvent.sig && { sig: messageAsEvent.sig }),
-  } as NostrEvent;
+  // The event is already the decrypted inner message (kind 4, 14, or 15)
+  const messageEvent: NostrEvent = event;
 
   return (
     <div className={cn("flex mb-4", isFromCurrentUser ? "justify-end" : "justify-start")}>
@@ -186,7 +171,7 @@ const MessageBubble = memo(({
           </div>
         ) : (
           <p className="text-sm whitespace-pre-wrap break-words">
-            {message.decryptedContent}
+            {event.content}
           </p>
         )}
         <div className="flex items-center justify-between gap-2 mt-1">
@@ -198,11 +183,11 @@ const MessageBubble = memo(({
                     "text-xs opacity-70 cursor-default",
                     isFromCurrentUser ? "text-primary-foreground" : "text-muted-foreground"
                   )}>
-                    {formatConversationTime(message.created_at)}
+                    {formatConversationTime(event.created_at)}
                   </span>
                 </TooltipTrigger>
                 <TooltipContent>
-                  <p className="text-xs">{formatFullDateTime(message.created_at)}</p>
+                  <p className="text-xs">{formatFullDateTime(event.created_at)}</p>
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
@@ -263,9 +248,9 @@ const MessageBubble = memo(({
         </div>
 
         <RawEventModal
-          outerEvent={outerEvent}
-          innerEvent={isNIP17Message ? message.decryptedEvent : undefined}
-          giftWrapEvent={isNIP17Message ? messageAsEvent.originalGiftWrap : undefined}
+          outerEvent={message.sealEvent || event}
+          innerEvent={isNIP17Message ? event : undefined}
+          giftWrapEvent={message.giftWrapEvent}
           open={showRawEvent}
           onOpenChange={setShowRawEvent}
         />
@@ -431,7 +416,7 @@ const ParticipantInfoModal = ({ open, onOpenChange, conversationId }: {
   const [copiedPubkey, setCopiedPubkey] = useState<string | null>(null);
   
   // Parse all participants
-  const allParticipants = useMemo(() => parseConversationId(conversationId), [conversationId]);
+  const allParticipants = useMemo(() => parseConversationId(conversationId).participantPubkeys, [conversationId]);
   
   // Fetch all participant profiles
   const authorsData = useAuthorsBatch(allParticipants);
@@ -556,8 +541,8 @@ const RelayInfoModal = ({ open, onOpenChange, conversationId }: { open: boolean;
 
   // Get all participant pubkeys and fetch their metadata
   const otherParticipants = useMemo(() => {
-    const allParticipants = parseConversationId(conversationId);
-    return allParticipants.filter(pk => pk !== user?.pubkey);
+    const { participantPubkeys } = parseConversationId(conversationId);
+    return participantPubkeys.filter(pk => pk !== user?.pubkey);
   }, [conversationId, user?.pubkey]);
   
   const authorsData = useAuthorsBatch(otherParticipants);
@@ -605,7 +590,7 @@ const ChatHeader = ({ conversationId, onBack }: { conversationId: string; onBack
   const [showParticipantModal, setShowParticipantModal] = useState(false);
   
   // Parse conversation participants and exclude current user from display
-  const allParticipants = parseConversationId(conversationId);
+  const { participantPubkeys: allParticipants } = parseConversationId(conversationId);
   const conversationParticipants = allParticipants.filter(pk => pk !== user?.pubkey);
 
   // Check if this is a self-messaging conversation
@@ -733,7 +718,7 @@ export const NewDMChatArea = ({ conversationId, onBack, className }: DMChatAreaP
   const devMode = config.devMode ?? false;
 
   // Check if this is a group chat (3+ participants including current user)
-  const allParticipants = parseConversationId(conversationId || '');
+  const { participantPubkeys: allParticipants } = conversationId ? parseConversationId(conversationId) : { participantPubkeys: [] };
   const isGroupChat = allParticipants.length >= 3;
 
   const [messageText, setMessageText] = useState('');
@@ -868,11 +853,11 @@ export const NewDMChatArea = ({ conversationId, onBack, className }: DMChatAreaP
                 </Button>
               </div>
             )}
-            {messages.map((message) => (
+            {messages.map((message: Message) => (
               <MessageBubble
-                key={message.originalGiftWrapId || message.id}
+                key={message.giftWrapId || message.id}
                 message={message}
-                isFromCurrentUser={message.pubkey === user.pubkey}
+                isFromCurrentUser={message.event.pubkey === user.pubkey}
                 showSenderName={isGroupChat}
                 devMode={devMode}
               />

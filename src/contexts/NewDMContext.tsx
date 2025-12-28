@@ -13,6 +13,8 @@ import type {
 } from '@/lib/dmTypes';
 import * as DMLib from '@/lib/dmLib';
 import type { Signer } from '@/lib/dmLib';
+import { PROTOCOL_MODE, type ProtocolMode, type MessageProtocol } from '@/lib/dmConstants';
+import type { ConversationRelayInfo } from '@/contexts/DMContext';
 
 const MESSAGES_PER_PAGE = 25;
 
@@ -214,11 +216,28 @@ interface MessagingContext {
   phase: 'cache' | 'initial_query' | 'gap_filling' | 'complete' | null;
 }
 
-interface NewDMContextValue extends MessagingContext {}
+interface NewDMContextValue extends MessagingContext {
+  // TODO: Not yet implemented
+  sendMessage: (params: {
+    recipientPubkey: string;
+    content: string;
+    protocol: MessageProtocol;
+  }) => Promise<void>;
+  protocolMode: ProtocolMode;
+  getConversationRelays: (conversationId: string) => ConversationRelayInfo[];
+}
 
 const NewDMContext = createContext<NewDMContextValue | undefined>(undefined);
 
-export const NewDMProvider = ({ children }: { children: ReactNode }) => {
+interface NewDMProviderProps {
+  children: ReactNode;
+  config?: {
+    protocolMode?: ProtocolMode;
+  };
+}
+
+export const NewDMProvider = ({ children, config }: NewDMProviderProps) => {
+  const { protocolMode = PROTOCOL_MODE.NIP04_OR_NIP17 } = config || {};
   const { nostr } = useNostr();
   const { user } = useCurrentUser();
   const { config: appConfig } = useAppContext();
@@ -279,7 +298,26 @@ export const NewDMProvider = ({ children }: { children: ReactNode }) => {
     })();
   }, [user?.pubkey, nostr, appConfig.discoveryRelays]);
   
-  const value: NewDMContextValue = context;
+  // TODO: Not yet implemented - stub implementations
+  const sendMessage = useCallback(async (_params: {
+    recipientPubkey: string;
+    content: string;
+    protocol: MessageProtocol;
+  }) => {
+    console.log('[NewDM] sendMessage not yet implemented');
+  }, []);
+  
+  const getConversationRelays = useCallback((_conversationId: string): ConversationRelayInfo[] => {
+    // TODO: Implement relay lookup from participants
+    return [];
+  }, []);
+  
+  const value: NewDMContextValue = {
+    ...context,
+    sendMessage,
+    protocolMode,
+    getConversationRelays,
+  };
   
   return (
     <NewDMContext.Provider value={value}>
