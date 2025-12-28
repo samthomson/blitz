@@ -708,17 +708,52 @@ const fetchRelayLists = async (nostr: NPool, discoveryRelays: string[], pubkeys:
   const results = new Map<string, RelayListsResult>();
   const relayInfo = new Map<string, RelayInfo>();
 
+  // Track results as they complete for early exit optimization
+  const completedResults: Array<{ relay: string; success: boolean; events: NostrEvent[]; error: string | null }> = [];
+  const majorityThreshold = Math.ceil(discoveryRelays.length * 0.6);
+  let majorityResolve: (() => void) | null = null;
+  
+  const majorityPromise = new Promise<void>((resolve) => {
+    majorityResolve = resolve;
+  });
+  
   // Query each discovery relay individually to track failures
-  const relayResults = await Promise.allSettled(
-    discoveryRelays.map(relay =>
-      nostr.relay(relay).query(
-        [{ kinds: [10002, 10050, 10006], authors: pubkeys }],
-        { signal: AbortSignal.timeout(8000) }
-      )
-        .then(events => ({ relay, success: true, events, error: null }))
-        .catch(error => ({ relay, success: false, events: [], error: String(error) }))
+  const relayPromises = discoveryRelays.map(relay =>
+    nostr.relay(relay).query(
+      [{ kinds: [10002, 10050, 10006], authors: pubkeys }],
+      { signal: AbortSignal.timeout(5000) }
     )
+      .then(events => {
+        const result = { relay, success: true, events, error: null };
+        completedResults.push(result);
+        if (completedResults.length >= majorityThreshold && majorityResolve) {
+          majorityResolve();
+        }
+        return result;
+      })
+      .catch(error => {
+        const result = { relay, success: false, events: [], error: String(error) };
+        completedResults.push(result);
+        if (completedResults.length >= majorityThreshold && majorityResolve) {
+          majorityResolve();
+        }
+        return result;
+      })
   );
+
+  // Wait for either all relays OR 60% majority (whichever comes first)
+  const raceWinner = await Promise.race([
+    Promise.allSettled(relayPromises).then(() => 'all'),
+    majorityPromise.then(() => 'majority')
+  ]);
+
+  // Log early exit if majority completed first
+  if (raceWinner === 'majority') {
+    console.log(`[DM] Early exit: ${completedResults.length}/${discoveryRelays.length} discovery relays responded (60% threshold)`);
+  }
+
+  // Use completed results (at least 60%, possibly all)
+  const relayResults = completedResults.map(result => ({ status: 'fulfilled' as const, value: result }));
 
   // Track relay health for discovery relays
   for (const result of relayResults) {
