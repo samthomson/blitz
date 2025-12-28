@@ -1,9 +1,12 @@
 import { NewDMMessagingInterface } from "@/components/dm/NewDMMessagingInterface";
 import { useNewDMContext } from "@/contexts/NewDMContext";
+import { AppSidebar } from "@/components/AppSidebar";
 import { Card, CardContent } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ChevronDown } from "lucide-react";
 import { useState, useMemo } from "react";
+import { DMProvider, type DMConfig } from "@/contexts/DMContext";
+import { PROTOCOL_MODE } from "@/lib/dmConstants";
 
 export function Test() {
   const { messagingState, isLoading, timing, phase } = useNewDMContext();
@@ -37,15 +40,19 @@ export function Test() {
     return { relayData: data, failedRelayCount: failed };
   }, [messagingState]);
 
+  const dmConfig: DMConfig = {
+    enabled: true,
+    protocolMode: PROTOCOL_MODE.NIP04_OR_NIP17,
+  };
+
   return (
-    <div className="container mx-auto py-8 h-[calc(100vh-4rem)]">
-      <h1 className="text-2xl font-bold mb-4">DM System Test Page</h1>
-      <p className="text-muted-foreground mb-4">
-        This page is wrapped in NewDMProvider. Testing the new DM system.
-      </p>
-      
-      {/* Debug Info */}
-      <Card className="mb-4 bg-muted/50">
+    <div className="h-screen flex bg-background">
+      <DMProvider config={dmConfig}>
+        <AppSidebar />
+      </DMProvider>
+      <div className="flex-1 overflow-hidden flex flex-col">
+        {/* Debug Info Panel */}
+        <Card className="m-4 mb-0 bg-muted/50 shrink-0">
         <CardContent className="py-3 px-4">
           <div className="grid grid-cols-2 md:grid-cols-6 gap-4 text-sm">
             <div>
@@ -181,8 +188,11 @@ export function Test() {
         </CardContent>
       </Card>
       
-      <hr className="mb-4" />
-      <NewDMMessagingInterface className="h-full" />
+      {/* Messaging Interface */}
+      <div className="flex-1 overflow-hidden m-4 mt-4">
+        <NewDMMessagingInterface />
+      </div>
+      </div>
     </div>
   );
 }
