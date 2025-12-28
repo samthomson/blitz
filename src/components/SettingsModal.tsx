@@ -258,7 +258,7 @@ export function SettingsModal({ open, onOpenChange, defaultTab = 'appearance' }:
                     <div className="flex flex-col items-start">
                       <div className="flex items-center gap-2">
                         <span className="font-medium">Relays</span>
-                        {failedRelayCount > 0 && <AlertTriangle className="h-4 w-4 text-destructive" />}
+                        {failedRelayCount > 0 && <AlertTriangle className="h-4 w-4 text-red-500" />}
                       </div>
                       <span className="text-xs text-muted-foreground">Manage your relay list</span>
                     </div>
@@ -354,7 +354,7 @@ export function SettingsModal({ open, onOpenChange, defaultTab = 'appearance' }:
               >
                 <Radio className="h-4 w-4" />
                 Relays
-                {failedRelayCount > 0 && <AlertTriangle className="h-3 w-3 ml-1 text-destructive" />}
+                {failedRelayCount > 0 && <AlertTriangle className="h-3 w-3 ml-1 text-red-500" />}
               </TabsTrigger>
               <TabsTrigger 
                 value="storage" 
