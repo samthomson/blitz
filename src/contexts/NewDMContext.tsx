@@ -135,22 +135,21 @@ const initialiseMessaging = async (
   console.groupEnd();
   
   // UPDATE 2: Process initial query messages and merge with current state
-  if (messagesWithMetadata.length > 0 || !currentState) {
-    console.log(`[NewDM] 📨 Initial query (${messagesWithMetadata.length} msgs) - ${Date.now() - startTime}ms`);
-    
-    const newState = DMLib.Pure.Sync.buildMessagingAppState(
-      myPubkey,
-      baseParticipants,
-      messagesWithMetadata,
-      [],
-      baseParticipants[myPubkey].derivedRelays,
-      isLimitReachedDuringInitialQuery,
-      relayInfoFromInitial
-    );
-    
-    currentState = mergeMessagingState(currentState, newState);
-    updateContext({ messagingState: currentState, phase: 'initial_query', isLoading: false, timing: timings });
-  }
+  // Always update to show progress (relay health, timing) even if 0 new messages
+  console.log(`[NewDM] 📨 Initial query (${messagesWithMetadata.length} msgs) - ${Date.now() - startTime}ms`);
+  
+  const newState = DMLib.Pure.Sync.buildMessagingAppState(
+    myPubkey,
+    baseParticipants,
+    messagesWithMetadata,
+    [],
+    baseParticipants[myPubkey].derivedRelays,
+    isLimitReachedDuringInitialQuery,
+    relayInfoFromInitial
+  );
+  
+  currentState = mergeMessagingState(currentState, newState);
+  updateContext({ messagingState: currentState, phase: 'initial_query', isLoading: false, timing: timings });
   
   // D. Extract unique users
   console.log('[NewDM] D. Extracting new pubkeys...');

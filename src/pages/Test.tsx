@@ -88,31 +88,31 @@ export function Test() {
                   <span className="font-mono font-bold">{timing.total ? `${(timing.total / 1000).toFixed(2)}s` : '-'}</span>
                 </div>
                 <div>
-                  <span className="text-muted-foreground">Cache:</span>{' '}
+                  <span className="text-muted-foreground">Load Cache:</span>{' '}
                   <span className="font-mono">{timing.loadCache ? `${timing.loadCache}ms` : '-'}</span>
                 </div>
                 <div>
-                  <span className="text-muted-foreground">Fetch Relays:</span>{' '}
+                  <span className="text-muted-foreground">A. Fetch My Relays:</span>{' '}
                   <span className="font-mono">{timing.fetchMyRelays ? `${timing.fetchMyRelays}ms` : '-'}</span>
                 </div>
                 <div>
-                  <span className="text-muted-foreground">Refresh Parts:</span>{' '}
+                  <span className="text-muted-foreground">B.2 Refresh Parts:</span>{' '}
                   <span className="font-mono">{timing.refreshParticipants ? `${timing.refreshParticipants}ms` : '-'}</span>
                 </div>
                 <div>
-                  <span className="text-muted-foreground">Query Msgs:</span>{' '}
+                  <span className="text-muted-foreground">C. Query Msgs:</span>{' '}
                   <span className="font-mono">{timing.queryMessages ? `${(timing.queryMessages / 1000).toFixed(2)}s` : '-'}</span>
                 </div>
                 <div>
-                  <span className="text-muted-foreground">Fetch Parts:</span>{' '}
+                  <span className="text-muted-foreground">E+F. Fetch Parts:</span>{' '}
                   <span className="font-mono">{timing.fetchAndMergeParticipants ? `${(timing.fetchAndMergeParticipants / 1000).toFixed(2)}s` : '-'}</span>
                 </div>
                 <div>
-                  <span className="text-muted-foreground">Query New:</span>{' '}
+                  <span className="text-muted-foreground">I. Query New Relays:</span>{' '}
                   <span className="font-mono">{timing.queryNewRelays ? `${(timing.queryNewRelays / 1000).toFixed(2)}s` : '-'}</span>
                 </div>
                 <div>
-                  <span className="text-muted-foreground">Build State:</span>{' '}
+                  <span className="text-muted-foreground">J+K. Build State:</span>{' '}
                   <span className="font-mono">{timing.buildAndSave ? `${timing.buildAndSave}ms` : '-'}</span>
                 </div>
                 {messagingState?.syncState.lastCacheTime && (
