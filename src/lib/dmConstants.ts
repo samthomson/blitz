@@ -25,7 +25,7 @@ export const PROTOCOL_MODE = {
 export type ProtocolMode = typeof PROTOCOL_MODE[keyof typeof PROTOCOL_MODE];
 
 // ============================================================================
-// Loading Phases
+// Loading Phases (Old DM System)
 // ============================================================================
 
 export const LOADING_PHASES = {
@@ -37,6 +37,20 @@ export const LOADING_PHASES = {
 } as const;
 
 export type LoadingPhase = typeof LOADING_PHASES[keyof typeof LOADING_PHASES];
+
+// ============================================================================
+// New DM Phases (New DM System)
+// ============================================================================
+
+export const NEW_DM_PHASES = {
+  IDLE: 'idle',
+  CACHE: 'cache',
+  INITIAL_QUERY: 'initial_query',
+  GAP_FILLING: 'gap_filling',
+  COMPLETE: 'complete',
+} as const;
+
+export type NewDMPhase = typeof NEW_DM_PHASES[keyof typeof NEW_DM_PHASES];
 
 // ============================================================================
 // Protocol Configuration

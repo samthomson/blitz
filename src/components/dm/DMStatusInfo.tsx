@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { RefreshCw, Database, Wifi, CheckCircle2, Loader2 } from 'lucide-react';
-import { useDMContext } from '@/contexts/DMContext';
-import { LOADING_PHASES } from '@/lib/dmConstants';
+import { useNewDMContext } from '@/contexts/NewDMContext';
+import { NEW_DM_PHASES } from '@/lib/dmConstants';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -16,13 +16,19 @@ export const DMStatusInfo = ({ clearCacheAndRefetch }: DMStatusInfoProps) => {
   const [isClearing, setIsClearing] = useState(false);
   const { toast } = useToast();
   const {
-    loadingPhase,
+    phase,
     subscriptions,
     scanProgress,
     isDoingInitialLoad,
-    lastSync,
-    conversations,
-  } = useDMContext();
+    messagingState,
+  } = useNewDMContext();
+
+  const conversationCount = messagingState ? Object.keys(messagingState.conversationMetadata).length : 0;
+  const totalMessages = useMemo(() => {
+    return messagingState
+      ? Object.values(messagingState.conversationMessages).reduce((sum, msgs) => sum + msgs.length, 0)
+      : 0;
+  }, [messagingState]);
 
   const handleClearCache = async () => {
     if (!clearCacheAndRefetch) return;
@@ -47,28 +53,26 @@ export const DMStatusInfo = ({ clearCacheAndRefetch }: DMStatusInfoProps) => {
   };
 
   const getLoadingPhaseInfo = () => {
-    switch (loadingPhase) {
-      case LOADING_PHASES.IDLE:
-        return { label: 'Idle', description: 'Not yet initialized', icon: Loader2, color: 'text-muted-foreground' };
-      case LOADING_PHASES.CACHE:
+    switch (phase) {
+      case NEW_DM_PHASES.CACHE:
         return { label: 'Loading from cache', description: 'Reading cached messages...', icon: Database, color: 'text-blue-500' };
-      case LOADING_PHASES.RELAYS:
+      case NEW_DM_PHASES.INITIAL_QUERY:
         return { label: 'Loading from relays', description: 'Fetching messages from Nostr relays...', icon: Wifi, color: 'text-yellow-500' };
-      case LOADING_PHASES.SUBSCRIPTIONS:
-        return { label: 'Connecting subscriptions', description: 'Setting up real-time message sync...', icon: RefreshCw, color: 'text-orange-500' };
-      case LOADING_PHASES.READY:
+      case NEW_DM_PHASES.GAP_FILLING:
+        return { label: 'Loading additional messages', description: 'Filling in message gaps...', icon: RefreshCw, color: 'text-orange-500' };
+      case NEW_DM_PHASES.COMPLETE:
         return { label: 'Ready', description: 'All systems operational', icon: CheckCircle2, color: 'text-green-500' };
       default:
-        return { label: 'Unknown', description: 'Status unknown', icon: Loader2, color: 'text-muted-foreground' };
+        return { label: 'Idle', description: 'Not yet initialized', icon: Loader2, color: 'text-muted-foreground' };
     }
   };
 
   const phaseInfo = getLoadingPhaseInfo();
   const PhaseIcon = phaseInfo.icon;
 
-  const formatTimestamp = (timestamp: number | null) => {
+  const formatTimestamp = (timestamp: number | null | undefined) => {
     if (!timestamp) return 'Never';
-    const date = new Date(timestamp * 1000);
+    const date = new Date(timestamp);
     const now = new Date();
     const diffMs = now.getTime() - date.getTime();
     const diffMins = Math.floor(diffMs / 60000);
@@ -85,7 +89,7 @@ export const DMStatusInfo = ({ clearCacheAndRefetch }: DMStatusInfoProps) => {
       <Card>
         <CardContent className="pt-6">
           <div className="flex items-start gap-3">
-            <PhaseIcon className={`h-5 w-5 ${phaseInfo.color} ${loadingPhase !== LOADING_PHASES.READY ? 'animate-pulse' : ''}`} />
+            <PhaseIcon className={`h-5 w-5 ${phaseInfo.color} ${phase !== NEW_DM_PHASES.COMPLETE ? 'animate-pulse' : ''}`} />
             <div className="flex-1 space-y-1">
               <div className="flex items-center gap-2">
                 <p className="font-medium">{phaseInfo.label}</p>
@@ -161,15 +165,15 @@ export const DMStatusInfo = ({ clearCacheAndRefetch }: DMStatusInfoProps) => {
             <div className="space-y-2 text-sm">
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground">Conversations</span>
-                <span className="font-medium">{conversations.length}</span>
+                <span className="font-medium">{conversationCount}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Last NIP-4 sync</span>
-                <span className="font-medium">{formatTimestamp(lastSync.nip4)}</span>
+                <span className="text-muted-foreground">Total Messages</span>
+                <span className="font-medium">{totalMessages}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Last NIP-17 sync</span>
-                <span className="font-medium">{formatTimestamp(lastSync.nip17)}</span>
+                <span className="text-muted-foreground">Last cache sync</span>
+                <span className="font-medium">{formatTimestamp(messagingState?.syncState.lastCacheTime)}</span>
               </div>
             </div>
           </div>

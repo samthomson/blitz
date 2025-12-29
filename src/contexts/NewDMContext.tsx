@@ -13,7 +13,7 @@ import type {
 } from '@/lib/dmTypes';
 import * as DMLib from '@/lib/dmLib';
 import type { Signer } from '@/lib/dmLib';
-import { PROTOCOL_MODE, type ProtocolMode, type MessageProtocol } from '@/lib/dmConstants';
+import { PROTOCOL_MODE, type ProtocolMode, type MessageProtocol, NEW_DM_PHASES, type NewDMPhase } from '@/lib/dmConstants';
 import type { ConversationRelayInfo } from '@/contexts/DMContext';
 
 const MESSAGES_PER_PAGE = 25;
@@ -62,7 +62,7 @@ const initialiseMessaging = async (
     if (cachedConvoCount > 0) {
       console.log(`[NewDM] 📦 Showing cache (${cachedConvoCount} convos) - ${Date.now() - startTime}ms`);
       currentState = cached;
-      updateContext({ messagingState: cached, phase: 'cache', isLoading: false, timing: timings });
+      updateContext({ messagingState: cached, phase: NEW_DM_PHASES.CACHE, isLoading: false, timing: timings });
     }
   }
   
@@ -153,7 +153,7 @@ const initialiseMessaging = async (
   );
   
   currentState = mergeMessagingState(currentState, newState);
-  updateContext({ messagingState: currentState, phase: 'initial_query', isLoading: false, timing: timings });
+  updateContext({ messagingState: currentState, phase: NEW_DM_PHASES.INITIAL_QUERY, isLoading: false, timing: timings });
   
   // D. Extract unique users
   console.log('[NewDM] D. Extracting new pubkeys...');
@@ -212,18 +212,35 @@ const initialiseMessaging = async (
   
   console.log(`[NewDM] ✅ Complete - ${Object.keys(currentState!.conversationMetadata).length} convos, ${timings.total}ms`);
   
-  updateContext({ messagingState: currentState, phase: 'complete', isLoading: false, timing: timings });
+  updateContext({ messagingState: currentState, phase: NEW_DM_PHASES.COMPLETE, isLoading: false, timing: timings });
 }
 
 // ============================================================================
 // React Context
 // ============================================================================
+// TODO
+interface SubscriptionStatus {
+  isNIP4Connected: boolean;
+  isNIP17Connected: boolean;
+}
+
+// TODO
+interface ScanProgress {
+  current: number;
+  status: string;
+}
+
+// TODO
+interface ScanProgressState {
+  nip4: ScanProgress | null;
+  nip17: ScanProgress | null;
+}
 
 interface MessagingContext {
   messagingState: MessagingState | null;
   isLoading: boolean;
   timing: Record<string, number>;
-  phase: 'cache' | 'initial_query' | 'gap_filling' | 'complete' | null;
+  phase: NewDMPhase | null;
 }
 
 interface NewDMContextValue extends MessagingContext {
@@ -236,6 +253,9 @@ interface NewDMContextValue extends MessagingContext {
   protocolMode: ProtocolMode;
   getConversationRelays: (conversationId: string) => ConversationRelayInfo[];
   clearCacheAndRefetch: () => Promise<void>;
+  subscriptions: SubscriptionStatus; // TODO: Implement real-time subscriptions
+  scanProgress: ScanProgressState; // TODO: Implement batch progress tracking
+  isDoingInitialLoad: boolean; // Derived from isLoading + phase
 }
 
 const NewDMContext = createContext<NewDMContextValue | undefined>(undefined);
@@ -259,6 +279,18 @@ export const NewDMProvider = ({ children, config }: NewDMProviderProps) => {
     timing: {},
     phase: null
   });
+  
+  // TODO: Implement real-time subscriptions for live message updates
+  const subscriptions: SubscriptionStatus = {
+    isNIP4Connected: false,
+    isNIP17Connected: false,
+  };
+
+  // TODO: Implement batch progress tracking for large message scans
+  const scanProgress: ScanProgressState = {
+    nip4: null,
+    nip17: null,
+  };
   
   const initialisedForPubkey = useRef<string | null>(null);
   
@@ -379,12 +411,17 @@ export const NewDMProvider = ({ children, config }: NewDMProviderProps) => {
     }
   }, [user?.pubkey, clearCacheAndRefetch]);
   
+  const isDoingInitialLoad = context.isLoading && (context.phase === NEW_DM_PHASES.CACHE || context.phase === NEW_DM_PHASES.INITIAL_QUERY);
+
   const value: NewDMContextValue = {
     ...context,
     sendMessage,
     protocolMode,
     getConversationRelays,
     clearCacheAndRefetch,
+    subscriptions, // TODO: Implement real-time subscriptions
+    scanProgress, // TODO: Implement batch progress tracking
+    isDoingInitialLoad,
   };
   
   return (
