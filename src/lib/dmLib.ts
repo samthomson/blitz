@@ -525,24 +525,28 @@ const addMessageToState = (
   const lastMessage = updatedMessages[updatedMessages.length - 1];
   const hasUserSentMessage = updatedMessages.some(msg => msg.event.pubkey === myPubkey);
   
-  const participants = messageWithMetadata.participants || [];
+  const participantPubkeys = messageWithMetadata.participants || [];
   const subject = messageWithMetadata.subject || '';
   
   // Efficiently update protocol flags - use existing values or check new message
   const existingMetadata = currentState.conversationMetadata[enrichedMessage.conversationId];
-  const hasNIP17Messages = (existingMetadata?.hasNIP17Messages) || enrichedMessage.protocol === 'nip17';
+  const hasNIP17 = (existingMetadata?.hasNIP17) || enrichedMessage.protocol === 'nip17';
+  const hasNIP04 = (existingMetadata?.hasNIP04) || enrichedMessage.protocol === 'nip04';
   const hasNIP4Messages = (existingMetadata?.hasNIP4Messages) || enrichedMessage.protocol === 'nip04';
   
   const updatedMetadata: Conversation = {
     id: enrichedMessage.conversationId,
-    participants,
+    participantPubkeys,
     subject,
-    lastMessage,
+    lastMessage: {
+      decryptedContent: lastMessage.event.content,
+    },
     lastActivity: lastMessage.event.created_at,
-    messageCount: updatedMessages.length,
+    lastReadAt: existingMetadata?.lastReadAt || 0,
     isKnown: hasUserSentMessage,
     isRequest: !hasUserSentMessage,
-    hasNIP17Messages,
+    hasNIP17,
+    hasNIP04,
     hasNIP4Messages,
   };
   
@@ -598,15 +602,20 @@ const buildMessagingAppState = (
     const participantPubkeys = parts[1] ? parts[1].split(',') : [];
     const subject = parts[2] || '';
     
+    // Sort messages by timestamp (oldest to newest)
+    const sortedMessages = [...messages].sort((a, b) => a.event.created_at - b.event.created_at);
+    
+    // Update conversationMessages with sorted array
+    conversationMessages[conversationId] = sortedMessages;
+    
     // Find last activity (most recent message timestamp)
-    const lastActivity = Math.max(...messages.map(m => m.event.created_at));
+    const lastActivity = Math.max(...sortedMessages.map(m => m.event.created_at));
     
     // Check protocols used
-    const hasNIP04 = messages.some(m => m.protocol === 'nip04');
-    const hasNIP17 = messages.some(m => m.protocol === 'nip17');
+    const hasNIP04 = sortedMessages.some(m => m.protocol === 'nip04');
+    const hasNIP17 = sortedMessages.some(m => m.protocol === 'nip17');
     
     // Get last message for preview
-    const sortedMessages = [...messages].sort((a, b) => a.event.created_at - b.event.created_at);
     const lastMsg = sortedMessages[sortedMessages.length - 1];
     const lastMessage = lastMsg ? {
       decryptedContent: lastMsg.event.content,
@@ -614,7 +623,7 @@ const buildMessagingAppState = (
     
     // Determine if conversation is known or a request
     // Known = we've sent at least one message, Request = we've only received
-    const hasSentMessage = messages.some(m => m.event.pubkey === myPubkey);
+    const hasSentMessage = sortedMessages.some(m => m.event.pubkey === myPubkey);
     const isKnown = hasSentMessage;
     const isRequest = !hasSentMessage;
     
