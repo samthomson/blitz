@@ -8,8 +8,6 @@ import { HelpDialog } from '@/components/HelpDialog';
 import { SettingsModal } from '@/components/SettingsModal';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { useLoggedInAccounts } from '@/hooks/useLoggedInAccounts';
-import { DMProvider, type DMConfig } from '@/contexts/DMContext';
-import { PROTOCOL_MODE } from '@/lib/dmConstants';
 
 export function AppSidebar() {
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -22,11 +20,6 @@ export function AppSidebar() {
   const displayName = metadata?.name || 'Anon';
   const avatarUrl = metadata?.picture;
   const initials = metadata?.name ? displayName.slice(0, 2).toUpperCase() : '?';
-
-  const dmConfig: DMConfig = {
-    enabled: true,
-    protocolMode: PROTOCOL_MODE.NIP04_OR_NIP17,
-  };
 
   return (
     <>
@@ -86,9 +79,7 @@ export function AppSidebar() {
       </div>
 
       <HelpDialog open={helpOpen} onOpenChange={setHelpOpen} />
-      <DMProvider config={dmConfig}>
-        <SettingsModal open={settingsOpen} onOpenChange={setSettingsOpen} defaultTab="profile" />
-      </DMProvider>
+      <SettingsModal open={settingsOpen} onOpenChange={setSettingsOpen} defaultTab="profile" />
     </>
   );
 }
