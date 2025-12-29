@@ -33,7 +33,7 @@ export interface Conversation {
   isKnown: boolean;
   isRequest: boolean;
   lastMessage: { decryptedContent?: string; error?: string } | null;
-  hasNIP4Messages: boolean;
+  hasDecryptionErrors: boolean; // True if any messages failed to decrypt
 }
 
 export interface Message {

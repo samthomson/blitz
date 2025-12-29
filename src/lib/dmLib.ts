@@ -64,6 +64,7 @@ export interface MessageWithMetadata {
   senderPubkey?: string;
   participants?: string[];
   subject?: string;
+  error?: string; // Decryption error message if decryption failed
   // NIP-17 debugging - store the encrypted layers
   sealEvent?: NostrEvent; // For NIP-17: the kind 13 seal (encrypted)
   giftWrapEvent?: NostrEvent; // For NIP-17: the full kind 1059 gift wrap
@@ -481,6 +482,7 @@ const enrichMessagesWithConversationId = (messagesWithMetadata: MessageWithMetad
     event: msg.event, // The inner message with DECRYPTED content
     conversationId: computeConversationId(msg.participants || [], msg.subject || ''),
     protocol: msg.event.kind === 4 ? 'nip04' : 'nip17',
+    error: msg.error, // Pass through decryption error flag
     // NIP-17 debugging - copy over encrypted layers
     giftWrapId: msg.giftWrapId,
     sealEvent: msg.sealEvent,
@@ -532,7 +534,9 @@ const addMessageToState = (
   const existingMetadata = currentState.conversationMetadata[enrichedMessage.conversationId];
   const hasNIP17 = (existingMetadata?.hasNIP17) || enrichedMessage.protocol === 'nip17';
   const hasNIP04 = (existingMetadata?.hasNIP04) || enrichedMessage.protocol === 'nip04';
-  const hasNIP4Messages = (existingMetadata?.hasNIP4Messages) || enrichedMessage.protocol === 'nip04';
+  
+  // Check if conversation has any decryption errors
+  const hasDecryptionErrors = (existingMetadata?.hasDecryptionErrors) || updatedMessages.some(m => m.error !== undefined);
   
   const updatedMetadata: Conversation = {
     id: enrichedMessage.conversationId,
@@ -540,6 +544,7 @@ const addMessageToState = (
     subject,
     lastMessage: {
       decryptedContent: lastMessage.event.content,
+      error: lastMessage.error,
     },
     lastActivity: lastMessage.event.created_at,
     lastReadAt: existingMetadata?.lastReadAt || 0,
@@ -547,7 +552,7 @@ const addMessageToState = (
     isRequest: !hasUserSentMessage,
     hasNIP17,
     hasNIP04,
-    hasNIP4Messages,
+    hasDecryptionErrors,
   };
   
   return {
@@ -615,10 +620,14 @@ const buildMessagingAppState = (
     const hasNIP04 = sortedMessages.some(m => m.protocol === 'nip04');
     const hasNIP17 = sortedMessages.some(m => m.protocol === 'nip17');
     
+    // Check if any messages have decryption errors
+    const hasDecryptionErrors = sortedMessages.some(m => m.error !== undefined);
+    
     // Get last message for preview
     const lastMsg = sortedMessages[sortedMessages.length - 1];
     const lastMessage = lastMsg ? {
       decryptedContent: lastMsg.event.content,
+      error: lastMsg.error,
     } : null;
     
     // Determine if conversation is known or a request
@@ -638,6 +647,7 @@ const buildMessagingAppState = (
       isKnown,
       isRequest,
       lastMessage,
+      hasDecryptionErrors,
     };
   }
   
@@ -1032,35 +1042,50 @@ const processNIP04Message = async (msg: NostrEvent, signer: Signer, myPubkey: st
   // If I'm the sender, decrypt with recipient's pubkey; if I'm the recipient, decrypt with sender's pubkey
   const otherPubkey = msg.pubkey === myPubkey ? recipientPubkey : msg.pubkey;
   
+  // Check if we can decrypt
   let decryptedContent: string | undefined;
-  if (otherPubkey && signer.nip04) {
+  let decryptionError: string | undefined;
+  
+  if (!otherPubkey) {
+    decryptionError = 'Missing recipient';
+  } else if (!signer.nip04) {
+    decryptionError = 'Signer does not support NIP-04';
+  } else {
     try {
       decryptedContent = await signer.nip04.decrypt(otherPubkey, msg.content);
     } catch (error) {
-      // Silent failure - decryption errors are expected for messages not intended for this account
-      // (e.g., when switching accounts or receiving malformed messages)
-      return null;
+      // Decryption failed - could be wrong keys, corrupted message, or not for this account
+      decryptionError = 'Unable to decrypt';
     }
   }
   
-  // Store decrypted content in the event's content field for MessageWithMetadata
+  // Store decrypted content in the event (or leave encrypted if failed)
   const eventWithDecrypted = {
     ...msg,
-    content: decryptedContent || msg.content // Use decrypted or fallback to encrypted
+    content: decryptedContent || msg.content // Use decrypted or keep original encrypted
   };
   
   return {
     event: eventWithDecrypted,
     senderPubkey: msg.pubkey,
     participants,
-    subject: '' // Empty string for NIP-04 (no subject support)
+    subject: '', // Empty string for NIP-04 (no subject support)
+    error: decryptionError, // Pass error flag through
   };
 };
 
 const processNIP17Message = async (msg: NostrEvent, signer: Signer): Promise<MessageWithMetadata | null> => {
   if (!signer.nip44) {
-    console.warn('[DM] NIP-44 not available, skipping gift wrap:', msg.id);
-    return null;
+    // Signer doesn't have NIP-44 decryption capability
+    return {
+      event: msg,
+      senderPubkey: msg.pubkey,
+      participants: [msg.pubkey],
+      subject: '',
+      error: 'Signer does not support NIP-44',
+      giftWrapEvent: msg,
+      giftWrapId: msg.id,
+    };
   }
   
   try {
@@ -1069,15 +1094,13 @@ const processNIP17Message = async (msg: NostrEvent, signer: Signer): Promise<Mes
     
     // Check if decryption failed
     if (!sealContent || typeof sealContent !== 'string') {
-      // Silently skip - likely not intended for us or malformed
-      return null;
+      throw new Error('Invalid seal content');
     }
     
     const seal = JSON.parse(sealContent) as NostrEvent;
     
     if (seal.kind !== 13) {
-      console.warn('[DM] Invalid seal kind:', seal.kind, 'expected 13');
-      return null;
+      throw new Error(`Invalid seal kind: ${seal.kind}`);
     }
     
     // Step 2: Decrypt seal to get inner message (kind 14 or 15)
@@ -1085,8 +1108,7 @@ const processNIP17Message = async (msg: NostrEvent, signer: Signer): Promise<Mes
     const inner = JSON.parse(innerContent) as NostrEvent;
     
     if (inner.kind !== 14 && inner.kind !== 15) {
-      console.warn('[DM] Invalid inner kind:', inner.kind, 'expected 14 or 15');
-      return null;
+      throw new Error(`Invalid inner kind: ${inner.kind}`);
     }
     
     // Step 3: Extract participants from p tags
@@ -1110,13 +1132,20 @@ const processNIP17Message = async (msg: NostrEvent, signer: Signer): Promise<Mes
       giftWrapId: msg.id // For deduplication
     };
   } catch (error) {
-    // Silently skip gift wraps we can't decrypt
-    // (likely not intended for us, corrupted, or wrong protocol version)
-    // Log only in debug mode to reduce noise
+    // Decryption failed - show error in UI rather than hiding the message
     if (process.env.NODE_ENV === 'development') {
       console.debug('[DM] Failed to unwrap gift wrap:', msg.id, error instanceof Error ? error.message : error);
     }
-    return null;
+    
+    return {
+      event: msg,
+      senderPubkey: msg.pubkey,
+      participants: [msg.pubkey],
+      subject: '',
+      error: 'Unable to decrypt',
+      giftWrapEvent: msg,
+      giftWrapId: msg.id,
+    };
   }
 };
 

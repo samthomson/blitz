@@ -1,5 +1,5 @@
 import { useMemo, useState, memo, useEffect, useRef } from 'react';
-import { Info, Loader2 } from 'lucide-react';
+import { Info, Loader2, AlertCircle } from 'lucide-react';
 import { useNewDMContext } from '@/contexts/NewDMContext';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useAuthor } from '@/hooks/useAuthor';
@@ -28,7 +28,7 @@ interface ConversationItemProps {
   onClick: () => void;
   lastMessage: { decryptedContent?: string; error?: string } | null;
   lastActivity: number;
-  hasNIP4Messages: boolean;
+  hasDecryptionErrors?: boolean;
 }
 
 const GroupAvatar = ({ pubkeys, isSelected }: { pubkeys: string[]; isSelected: boolean }) => {
@@ -123,6 +123,7 @@ const ConversationItemComponent = ({
   onClick,
   lastMessage,
   lastActivity,
+  hasDecryptionErrors,
 }: ConversationItemProps) => {
   const { user } = useCurrentUser();
   
@@ -208,9 +209,23 @@ const ConversationItemComponent = ({
             </TooltipProvider>
           </div>
 
-          <p className="text-sm text-muted-foreground truncate">
-            {lastMessagePreview}
-          </p>
+          <div className="flex items-center gap-1.5">
+            <p className="text-sm text-muted-foreground truncate flex-1">
+              {lastMessagePreview}
+            </p>
+            {hasDecryptionErrors && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <AlertCircle className="h-3.5 w-3.5 text-destructive flex-shrink-0" />
+                  </TooltipTrigger>
+                  <TooltipContent side="left">
+                    <p className="text-xs">Some messages failed to decrypt</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
+          </div>
         </div>
       </div>
     </button>
@@ -419,7 +434,7 @@ export const NewDMConversationList = ({
                   onClick={() => onSelectConversation(conversation.id)}
                   lastMessage={conversation.lastMessage}
                   lastActivity={conversation.lastActivity}
-                  hasNIP4Messages={conversation.hasNIP4Messages}
+                  hasDecryptionErrors={conversation.hasDecryptionErrors}
                 />
               ))}
             </div>
