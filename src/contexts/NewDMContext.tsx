@@ -158,7 +158,7 @@ const initialiseMessaging = async (
   
   // D. Extract unique users
   console.log('[NewDM] D. Extracting new pubkeys...');
-  const newPubkeys = DMLib.Pure.Participant.extractNewPubkeys(messagesWithMetadata, baseParticipants, myPubkey, mode);
+  const newPubkeys = DMLib.Pure.Participant.extractNewPubkeys(messagesWithMetadata, baseParticipants, myPubkey);
   console.log('[NewDM] D. New pubkeys:', newPubkeys);
   
   // E+F. Fetch relay lists and merge participants

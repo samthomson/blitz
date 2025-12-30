@@ -515,21 +515,6 @@ const computeSinceTimestamp = (lastCacheTime: number | null, nip17FuzzDays: numb
   return lastCacheTime - fuzzSeconds;
 }
 /**
- * Determines which pubkeys are new based on startup mode
- * 
- * NOTE: Currently just delegates to getNewPubkeys - may be redundant.
- * Revisit to see if mode-specific logic is needed, or remove entirely.
- * 
- * @param foundPubkeys - Pubkeys discovered from messages
- * @param existingPubkeys - Pubkeys we already have participant data for
- * @param mode - Startup mode (cold or warm) - currently unused
- * @returns Array of new pubkeys that need to be fetched
- */
-const determineNewPubkeys = (foundPubkeys: string[], existingPubkeys: string[], mode: StartupMode): string[] => {
-  // TODO: Revisit if mode-specific logic is needed, or if this function should be removed
-  return getNewPubkeys(foundPubkeys, existingPubkeys);
-}
-/**
  * Converts MessageWithMetadata to Message by adding conversationId and protocol
  * 
  * @param messagesWithMetadata - Decrypted messages with participant and subject info
@@ -816,15 +801,15 @@ const buildMessagingAppState = (
  * @param mode - Startup mode (currently unused)
  * @returns Pubkeys that need to be fetched
  */
-const extractNewPubkeys = (messagesWithMetadata: MessageWithMetadata[], baseParticipants: Record<string, Participant>, myPubkey: string, mode: StartupMode): string[] => {
+const extractNewPubkeys = (messagesWithMetadata: MessageWithMetadata[], baseParticipants: Record<string, Participant>, myPubkey: string): string[] => {
   // 1. Extract all other pubkeys from messages
   const foundPubkeys = extractOtherPubkeysFromMessages(messagesWithMetadata, myPubkey);
   
   // 2. Get existing pubkeys from baseParticipants
   const existingPubkeys = Object.keys(baseParticipants);
   
-  // 3. Determine which are new based on mode
-  return determineNewPubkeys(foundPubkeys, existingPubkeys, mode);
+  // 3. Determine which are new
+  return getNewPubkeys(foundPubkeys, existingPubkeys);
 }
 /**
  * High-level orchestrator: Finds new relays to query based on participants
@@ -889,7 +874,6 @@ export const Pure = {
     getStaleParticipants,
     getNewPubkeys,
     extractNewPubkeys,
-    determineNewPubkeys,
   },
   Conversation: {
     computeConversationId,

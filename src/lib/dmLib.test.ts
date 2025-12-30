@@ -2250,7 +2250,7 @@ describe('DMLib', () => {
             alice: { pubkey: 'alice', derivedRelays: [], blockedRelays: [], lastFetched: 1000 }
           };
           
-          const result = DMLib.Pure.Participant.extractNewPubkeys([], baseParticipants, myPubkey, DMLib.StartupMode.COLD);
+          const result = DMLib.Pure.Participant.extractNewPubkeys([], baseParticipants, myPubkey);
           expect(result).toEqual([]);
         });
 
@@ -2267,7 +2267,7 @@ describe('DMLib', () => {
             alice: { pubkey: 'alice', derivedRelays: [], blockedRelays: [], lastFetched: 1000 }
           };
           
-          const result = DMLib.Pure.Participant.extractNewPubkeys(messages, baseParticipants, myPubkey, DMLib.StartupMode.COLD);
+          const result = DMLib.Pure.Participant.extractNewPubkeys(messages, baseParticipants, myPubkey);
           expect(result).toEqual([]);
         });
 
@@ -2289,7 +2289,7 @@ describe('DMLib', () => {
             alice: { pubkey: 'alice', derivedRelays: [], blockedRelays: [], lastFetched: 1000 }
           };
           
-          const result = DMLib.Pure.Participant.extractNewPubkeys(messages, baseParticipants, myPubkey, DMLib.StartupMode.COLD);
+          const result = DMLib.Pure.Participant.extractNewPubkeys(messages, baseParticipants, myPubkey);
           expect(result).toEqual(['bob']);
         });
 
@@ -2304,7 +2304,7 @@ describe('DMLib', () => {
           
           const baseParticipants = {};
           
-          const result = DMLib.Pure.Participant.extractNewPubkeys(messages, baseParticipants, myPubkey, DMLib.StartupMode.WARM);
+          const result = DMLib.Pure.Participant.extractNewPubkeys(messages, baseParticipants, myPubkey);
           expect(result).toEqual(['alice']);
           expect(result).not.toContain(myPubkey);
         });
@@ -2325,7 +2325,7 @@ describe('DMLib', () => {
           
           const baseParticipants = {};
           
-          const result = DMLib.Pure.Participant.extractNewPubkeys(messages, baseParticipants, myPubkey, DMLib.StartupMode.COLD);
+          const result = DMLib.Pure.Participant.extractNewPubkeys(messages, baseParticipants, myPubkey);
           expect(result).toHaveLength(3);
           expect(result).toContain('alice');
           expect(result).toContain('bob');
@@ -2350,7 +2350,7 @@ describe('DMLib', () => {
             alice: { pubkey: 'alice', derivedRelays: [], blockedRelays: [], lastFetched: 1000 }
           };
           
-          const result = DMLib.Pure.Participant.extractNewPubkeys(messages, baseParticipants, myPubkey, DMLib.StartupMode.WARM);
+          const result = DMLib.Pure.Participant.extractNewPubkeys(messages, baseParticipants, myPubkey);
           expect(result).toHaveLength(2);
           expect(result).toContain('bob');
           expect(result).toContain('charlie');
@@ -2375,8 +2375,8 @@ describe('DMLib', () => {
             alice: { pubkey: 'alice', derivedRelays: [], blockedRelays: [], lastFetched: 1000 }
           };
           
-          const coldResult = DMLib.Pure.Participant.extractNewPubkeys(messages, baseParticipants, myPubkey, DMLib.StartupMode.COLD);
-          const warmResult = DMLib.Pure.Participant.extractNewPubkeys(messages, baseParticipants, myPubkey, DMLib.StartupMode.WARM);
+          const coldResult = DMLib.Pure.Participant.extractNewPubkeys(messages, baseParticipants, myPubkey);
+          const warmResult = DMLib.Pure.Participant.extractNewPubkeys(messages, baseParticipants, myPubkey);
           
           expect(coldResult).toEqual(warmResult);
           expect(coldResult).toEqual(['bob']);
@@ -2408,7 +2408,7 @@ describe('DMLib', () => {
             alice: { pubkey: 'alice', derivedRelays: [], blockedRelays: [], lastFetched: 1000 }
           };
           
-          const result = DMLib.Pure.Participant.extractNewPubkeys(messages, baseParticipants, myPubkey, DMLib.StartupMode.WARM);
+          const result = DMLib.Pure.Participant.extractNewPubkeys(messages, baseParticipants, myPubkey);
           
           expect(result).toHaveLength(3);
           expect(result).toContain('bob');
