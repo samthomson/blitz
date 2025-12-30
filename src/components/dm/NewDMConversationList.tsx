@@ -260,9 +260,7 @@ export const NewDMConversationList = ({
   className,
   onStatusClick
 }: DMConversationListProps) => {
-  // TODO: Add loadingPhase when new cold/warm start flow is finalized
-  // Old code: const { conversations, isLoading, loadingPhase } = useDMContext();
-  const { messagingState, isLoading } = useNewDMContext();
+  const { messagingState, isLoading, phase } = useNewDMContext();
   const [activeTab, setActiveTab] = useState<'known' | 'requests'>('known');
   const prevWasRequestRef = useRef<Set<string>>(new Set());
 
@@ -301,10 +299,8 @@ export const NewDMConversationList = ({
   // Get the current list based on active tab
   const currentConversations = activeTab === 'known' ? knownConversations : requestConversations;
 
-  // Show skeleton during initial load if we have no conversations yet
-  // TODO: Re-implement with new loading phases when cold/warm start flow is finalized
-  // Old code: const isInitialLoad = (loadingPhase === LOADING_PHASES.CACHE || loadingPhase === LOADING_PHASES.RELAYS) && conversations.length === 0;
-  const isInitialLoad = isLoading && conversations.length === 0;
+  // Show skeleton only during initial load when we have no data yet (not during sync)
+  const isInitialLoad = isLoading && conversations.length === 0 && !phase;
 
   return (
     <div className={cn("h-full flex flex-col overflow-hidden border-r border-border bg-card", className)}>
@@ -342,18 +338,12 @@ export const NewDMConversationList = ({
             )}
             */}
             {isLoading && (
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <div className="flex items-center pt-1">
-                      <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                    </div>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p className="text-xs">Loading messages...</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+              <div className="flex items-center gap-1 px-2 py-1 rounded-md bg-muted/40">
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                <span className="text-[10px] text-muted-foreground/80 font-medium leading-none">
+                  Syncing...
+                </span>
+              </div>
             )}
           </div>
           <div className="flex items-center gap-1">
@@ -409,7 +399,7 @@ export const NewDMConversationList = ({
 
       {/* Content area - show skeleton during initial load, otherwise show conversations */}
       <div className="flex-1 min-h-0 mt-2 overflow-hidden">
-        {(isLoading || isInitialLoad) ? (
+        {isInitialLoad ? (
           <ConversationListSkeleton />
         ) : conversations.length === 0 ? (
           <div className="flex items-center justify-center h-full text-center text-muted-foreground px-4">

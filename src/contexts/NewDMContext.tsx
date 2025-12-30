@@ -62,7 +62,7 @@ const initialiseMessaging = async (
     if (cachedConvoCount > 0) {
       console.log(`[NewDM] 📦 Showing cache (${cachedConvoCount} convos) - ${Date.now() - startTime}ms`);
       currentState = cached;
-      updateContext({ messagingState: cached, phase: NEW_DM_PHASES.CACHE, isLoading: false, timing: timings });
+      updateContext({ messagingState: cached, phase: NEW_DM_PHASES.CACHE, isLoading: true, timing: timings });
     }
   }
   
@@ -162,7 +162,7 @@ const initialiseMessaging = async (
   );
   
   currentState = mergeMessagingState(currentState, newState);
-  updateContext({ messagingState: currentState, phase: NEW_DM_PHASES.INITIAL_QUERY, isLoading: false, timing: timings });
+  updateContext({ messagingState: currentState, phase: NEW_DM_PHASES.INITIAL_QUERY, isLoading: true, timing: timings });
   
   // D. Extract unique users
   console.log('[NewDM] D. Extracting new pubkeys...');
