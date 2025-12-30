@@ -2780,6 +2780,116 @@ describe('DMLib', () => {
           expect(messages.map(m => m.id)).toEqual(originalIds);
         });
       });
+
+      describe('normalizeRelayUrl', () => {
+        it('should remove trailing slash', () => {
+          const result = DMLib.Pure.Conversation.normalizeRelayUrl('wss://relay.example.com/');
+          expect(result).toBe('wss://relay.example.com');
+        });
+
+        it('should not modify URL without trailing slash', () => {
+          const result = DMLib.Pure.Conversation.normalizeRelayUrl('wss://relay.example.com');
+          expect(result).toBe('wss://relay.example.com');
+        });
+
+        it('should handle multiple trailing slashes', () => {
+          const result = DMLib.Pure.Conversation.normalizeRelayUrl('wss://relay.example.com//');
+          expect(result).toBe('wss://relay.example.com/');
+        });
+
+        it('should handle empty string', () => {
+          const result = DMLib.Pure.Conversation.normalizeRelayUrl('');
+          expect(result).toBe('');
+        });
+      });
+
+      describe('getConversationRelays', () => {
+        it('should return relays for 1-on-1 conversation', () => {
+          const participants = {
+            alice: { pubkey: 'alice', derivedRelays: ['wss://relay1.com', 'wss://relay2.com'], blockedRelays: [], lastFetched: Date.now() },
+            bob: { pubkey: 'bob', derivedRelays: ['wss://relay2.com', 'wss://relay3.com'], blockedRelays: [], lastFetched: Date.now() }
+          };
+
+          const result = DMLib.Pure.Conversation.getConversationRelays('group:alice,bob:', participants, 'alice');
+
+          expect(result).toHaveLength(3);
+          expect(result[0].relay).toBe('wss://relay2.com'); // Shared relay first
+          expect(result[0].users).toHaveLength(2);
+          expect(result[1].users).toHaveLength(1);
+          expect(result[2].users).toHaveLength(1);
+        });
+
+        it('should mark current user correctly', () => {
+          const participants = {
+            alice: { pubkey: 'alice', derivedRelays: ['wss://relay1.com'], blockedRelays: [], lastFetched: Date.now() },
+            bob: { pubkey: 'bob', derivedRelays: ['wss://relay2.com'], blockedRelays: [], lastFetched: Date.now() }
+          };
+
+          const result = DMLib.Pure.Conversation.getConversationRelays('group:alice,bob:', participants, 'alice');
+
+          const aliceRelay = result.find(r => r.relay === 'wss://relay1.com');
+          const bobRelay = result.find(r => r.relay === 'wss://relay2.com');
+
+          expect(aliceRelay?.users[0].isCurrentUser).toBe(true);
+          expect(aliceRelay?.users[0].source).toBe('Your inbox relays');
+          expect(bobRelay?.users[0].isCurrentUser).toBe(false);
+          expect(bobRelay?.users[0].source).toBe('Inbox relays');
+        });
+
+        it('should normalize relay URLs for matching', () => {
+          const participants = {
+            alice: { pubkey: 'alice', derivedRelays: ['wss://relay1.com/'], blockedRelays: [], lastFetched: Date.now() },
+            bob: { pubkey: 'bob', derivedRelays: ['wss://relay1.com'], blockedRelays: [], lastFetched: Date.now() }
+          };
+
+          const result = DMLib.Pure.Conversation.getConversationRelays('group:alice,bob:', participants, 'alice');
+
+          expect(result).toHaveLength(1); // Should be treated as same relay
+          expect(result[0].relay).toBe('wss://relay1.com');
+          expect(result[0].users).toHaveLength(2);
+        });
+
+        it('should sort by most shared relays first', () => {
+          const participants = {
+            alice: { pubkey: 'alice', derivedRelays: ['wss://relay1.com', 'wss://shared.com'], blockedRelays: [], lastFetched: Date.now() },
+            bob: { pubkey: 'bob', derivedRelays: ['wss://relay2.com', 'wss://shared.com'], blockedRelays: [], lastFetched: Date.now() },
+            charlie: { pubkey: 'charlie', derivedRelays: ['wss://relay3.com', 'wss://shared.com'], blockedRelays: [], lastFetched: Date.now() }
+          };
+
+          const result = DMLib.Pure.Conversation.getConversationRelays('group:alice,bob,charlie:', participants, 'alice');
+
+          expect(result[0].relay).toBe('wss://shared.com');
+          expect(result[0].users).toHaveLength(3); // All three users share this relay
+        });
+
+        it('should handle missing participants gracefully', () => {
+          const participants = {
+            alice: { pubkey: 'alice', derivedRelays: ['wss://relay1.com'], blockedRelays: [], lastFetched: Date.now() }
+          };
+
+          const result = DMLib.Pure.Conversation.getConversationRelays('group:alice,bob:', participants, 'alice');
+
+          expect(result).toHaveLength(1);
+          expect(result[0].relay).toBe('wss://relay1.com');
+          expect(result[0].users).toHaveLength(1);
+        });
+
+        it('should return empty array for conversation with no participants', () => {
+          const participants = {};
+          const result = DMLib.Pure.Conversation.getConversationRelays('group:alice,bob:', participants, 'alice');
+          expect(result).toEqual([]);
+        });
+
+        it('should handle participants with no relays', () => {
+          const participants = {
+            alice: { pubkey: 'alice', derivedRelays: [], blockedRelays: [], lastFetched: Date.now() },
+            bob: { pubkey: 'bob', derivedRelays: [], blockedRelays: [], lastFetched: Date.now() }
+          };
+
+          const result = DMLib.Pure.Conversation.getConversationRelays('group:alice,bob:', participants, 'alice');
+          expect(result).toEqual([]);
+        });
+      });
     });
 
     describe('Sync', () => {
