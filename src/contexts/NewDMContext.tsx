@@ -256,7 +256,7 @@ interface NewDMContextValue extends MessagingContext {
   protocolMode: ProtocolMode;
   getConversationRelays: (conversationId: string) => ConversationRelayInfo[];
   clearCacheAndRefetch: () => Promise<void>;
-  subscriptions: SubscriptionStatus; // TODO: Implement real-time subscriptions
+  subscriptions: SubscriptionStatus;
   scanProgress: ScanProgressState; // TODO: Implement batch progress tracking
   isDoingInitialLoad: boolean; // Derived from isLoading + phase
 }
