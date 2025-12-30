@@ -537,7 +537,9 @@ const determineNewPubkeys = (foundPubkeys: string[], existingPubkeys: string[], 
  */
 const enrichMessagesWithConversationId = (messagesWithMetadata: MessageWithMetadata[]): Message[] => {
   return messagesWithMetadata.map(msg => ({
-    id: msg.event.id,
+    // For NIP-17, inner messages don't have IDs (they're never signed), so use giftWrapId as the ID
+    // For NIP-04, use the event ID
+    id: msg.event.id || msg.giftWrapId || `missing-id-${msg.event.created_at}-${msg.event.pubkey.substring(0, 8)}`,
     event: msg.event, // The inner message with DECRYPTED content
     conversationId: computeConversationId(msg.participants || [], msg.subject || ''),
     protocol: msg.event.kind === 4 ? 'nip04' : 'nip17',
@@ -1528,6 +1530,177 @@ const buildAndSaveCache = async (
   return state;
 }
 
+/**
+ * File attachment for direct messages (NIP-92 compatible).
+ */
+export interface FileAttachment {
+  url: string;
+  mimeType: string;
+  size: number;
+  name: string;
+  tags: string[][];
+}
+
+/**
+ * Prepare message content with file URLs appended
+ */
+const prepareMessageContent = (content: string, attachments: FileAttachment[] = []): string => {
+  if (attachments.length === 0) return content;
+  const fileUrls = attachments.map(file => file.url).join('\n');
+  return content ? `${content}\n\n${fileUrls}` : fileUrls;
+};
+
+/**
+ * Create imeta tags for file attachments (NIP-92)
+ */
+const createImetaTags = (attachments: FileAttachment[] = []): string[][] => {
+  return attachments.map(file => {
+    const imetaTag = ['imeta'];
+    imetaTag.push(`url ${file.url}`);
+    if (file.mimeType) imetaTag.push(`m ${file.mimeType}`);
+    if (file.size) imetaTag.push(`size ${file.size}`);
+    if (file.name) imetaTag.push(`alt ${file.name}`);
+    file.tags.forEach(tag => {
+      if (tag[0] === 'x') imetaTag.push(`x ${tag[1]}`);
+      if (tag[0] === 'ox') imetaTag.push(`ox ${tag[1]}`);
+    });
+    return imetaTag;
+  });
+};
+
+/**
+ * Send NIP-04 encrypted message
+ */
+const sendNIP04Message = async (
+  nostr: NPool,
+  signer: Signer,
+  myPubkey: string,
+  recipientPubkey: string,
+  content: string,
+  attachments: FileAttachment[],
+  myInboxRelays: string[],
+  recipientInboxRelays: string[],
+  signEvent: (event: Omit<NostrEvent, 'id' | 'sig'>) => Promise<NostrEvent>
+): Promise<NostrEvent> => {
+  if (!signer.nip04) throw new Error('NIP-04 encryption not available');
+
+  const messageContent = prepareMessageContent(content, attachments);
+  const encryptedContent = await signer.nip04.encrypt(recipientPubkey, messageContent);
+  const tags: string[][] = [['p', recipientPubkey], ...createImetaTags(attachments)];
+  const publishRelays = Array.from(new Set([...myInboxRelays, ...recipientInboxRelays]));
+  const relayGroup = nostr.group(publishRelays);
+
+  const privateMessage: Omit<NostrEvent, 'id' | 'sig'> = {
+    kind: 4,
+    pubkey: myPubkey,
+    created_at: Math.floor(Date.now() / 1000),
+    tags,
+    content: encryptedContent,
+  };
+
+  const signedEvent = await signEvent(privateMessage);
+  await relayGroup.event(signedEvent);
+  return signedEvent;
+};
+
+/**
+ * Send NIP-17 encrypted message (supports group chats)
+ */
+const sendNIP17Message = async (
+  nostr: NPool,
+  signer: Signer,
+  myPubkey: string,
+  recipients: string[],
+  content: string,
+  attachments: FileAttachment[],
+  getInboxRelays: (pubkey: string) => Promise<string[]>
+): Promise<NostrEvent> => {
+  if (!signer.nip44) throw new Error('NIP-44 encryption not available');
+
+  const now = Math.floor(Date.now() / 1000);
+  const randomizeTimestamp = (baseTime: number) => {
+    const twoDaysInSeconds = 2 * 24 * 60 * 60;
+    return baseTime + -Math.floor(Math.random() * twoDaysInSeconds);
+  };
+
+  const messageContent = prepareMessageContent(content, attachments);
+  const tags: string[][] = [
+    ...recipients.map(pubkey => ['p', pubkey]),
+    ...createImetaTags(attachments)
+  ];
+  const messageKind = attachments.length > 0 ? 15 : 14;
+
+  const privateMessage: Omit<NostrEvent, 'id' | 'sig'> = {
+    kind: messageKind,
+    pubkey: myPubkey,
+    created_at: now,
+    tags,
+    content: messageContent,
+  };
+
+  const allRecipients = [...new Set([...recipients, myPubkey])];
+  const giftWraps: NostrEvent[] = [];
+
+  for (const recipientPubkey of allRecipients) {
+    const seal: Omit<NostrEvent, 'id' | 'sig'> = {
+      kind: 13,
+      pubkey: myPubkey,
+      created_at: now,
+      tags: [],
+      content: await signer.nip44.encrypt(recipientPubkey, JSON.stringify(privateMessage)),
+    };
+
+    const { NSecSigner } = await import('@nostrify/nostrify');
+    const { generateSecretKey } = await import('nostr-tools');
+    const randomKey = generateSecretKey();
+    const randomSigner = new NSecSigner(randomKey);
+
+    const giftWrapContent = await randomSigner.nip44!.encrypt(recipientPubkey, JSON.stringify(seal));
+    const giftWrap = await randomSigner.signEvent({
+      kind: 1059,
+      created_at: randomizeTimestamp(now),
+      tags: [['p', recipientPubkey]],
+      content: giftWrapContent,
+    });
+
+    giftWraps.push(giftWrap);
+  }
+
+  const inboxRelayPromises = giftWraps.map(async (giftWrap) => {
+    const recipientPubkey = giftWrap.tags.find(tag => tag[0] === 'p')?.[1];
+    if (!recipientPubkey) throw new Error('Gift wrap missing recipient pubkey');
+    return { giftWrap, inboxRelays: await getInboxRelays(recipientPubkey) };
+  });
+
+  const giftWrapWithRelays = await Promise.all(inboxRelayPromises);
+  const publishPromises = giftWrapWithRelays.map(({ giftWrap, inboxRelays }) => {
+    const relayGroup = nostr.group(inboxRelays);
+    return relayGroup.event(giftWrap);
+  });
+
+  const results = await Promise.allSettled(publishPromises);
+  const failures = results.filter(r => r.status === 'rejected');
+
+  if (failures.length > 0) {
+    console.error(`[DM] Failed to publish ${failures.length}/${giftWraps.length} gift wraps`);
+    failures.forEach((result) => {
+      if (result.status === 'rejected') console.error('[DM] Gift wrap failed:', result.reason);
+    });
+  }
+
+  if (failures.length === giftWraps.length) {
+    throw new Error('All gift wraps rejected. Check console for details.');
+  }
+
+  const recipientGiftWrapCount = giftWraps.length - 1;
+  const recipientFailures = failures.length > 0 && failures.length >= recipientGiftWrapCount;
+  if (recipientFailures && recipients.length > 0) {
+    throw new Error('Message may not have been delivered to recipients. Please check your relay connection and try again.');
+  }
+
+  return giftWraps[0];
+};
+
 export const Impure = {
   Relay: {
     fetchRelayLists,
@@ -1540,6 +1713,10 @@ export const Impure = {
     decryptAllMessages,
     queryMessages,
     queryNewRelays,
+    sendNIP04Message,
+    sendNIP17Message,
+    prepareMessageContent,
+    createImetaTags,
   },
   Participant: {
     refreshStaleParticipants,

@@ -4,6 +4,8 @@ import { createContext, useContext, ReactNode, useState, useEffect, useRef, useM
 import { useNostr } from '@nostrify/react';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useAppContext } from '@/hooks/useAppContext';
+import { useNostrPublish } from '@/hooks/useNostrPublish';
+import { useToast } from '@/hooks/useToast';
 import type { NPool } from '@nostrify/nostrify';
 import { RELAY_MODE } from '@/lib/dmTypes';
 import type {
@@ -13,10 +15,15 @@ import type {
 } from '@/lib/dmTypes';
 import * as DMLib from '@/lib/dmLib';
 import type { Signer } from '@/lib/dmLib';
-import { PROTOCOL_MODE, type ProtocolMode, type MessageProtocol, NEW_DM_PHASES, type NewDMPhase } from '@/lib/dmConstants';
+import { PROTOCOL_MODE, type ProtocolMode, type MessageProtocol, NEW_DM_PHASES, type NewDMPhase, MESSAGE_PROTOCOL } from '@/lib/dmConstants';
 import type { ConversationRelayInfo } from '@/contexts/DMContext';
+import type { NostrEvent } from '@nostrify/nostrify';
+import type { FileAttachment } from '@/lib/dmLib';
 
 const MESSAGES_PER_PAGE = 25;
+
+// Re-export FileAttachment from dmLib
+export type { FileAttachment } from '@/lib/dmLib';
 
 // ============================================================================
 // Orchestrators
@@ -240,11 +247,11 @@ interface MessagingContext {
 }
 
 interface NewDMContextValue extends MessagingContext {
-  // TODO: Not yet implemented
   sendMessage: (params: {
     recipientPubkey: string;
     content: string;
     protocol: MessageProtocol;
+    attachments?: FileAttachment[];
   }) => Promise<void>;
   protocolMode: ProtocolMode;
   getConversationRelays: (conversationId: string) => ConversationRelayInfo[];
@@ -293,6 +300,9 @@ export const NewDMProvider = ({ children, config }: NewDMProviderProps) => {
   const initialisedForPubkey = useRef<string | null>(null);
   const nip4SubscriptionRef = useRef<{ close: () => void } | null>(null);
   const nip17SubscriptionRef = useRef<{ close: () => void } | null>(null);
+  const debouncedWriteRef = useRef<NodeJS.Timeout | null>(null);
+  
+  const DEBOUNCED_WRITE_DELAY = 5000;
   
   // Stable callback - doesn't depend on context
   const updateContext = useCallback((updates: Partial<MessagingContext>) => {
@@ -321,6 +331,8 @@ export const NewDMProvider = ({ children, config }: NewDMProviderProps) => {
         return; // Failed to process or decrypt
       }
       
+      const messageWithMetadata = messagesWithMetadata[0];
+      
       // Add message incrementally using function form of setState to get current state
       setContext(prev => {
         if (!prev.messagingState) {
@@ -328,13 +340,54 @@ export const NewDMProvider = ({ children, config }: NewDMProviderProps) => {
           return prev;
         }
         
+        // Before adding, check if this matches an optimistic message from the current user
+        // Match by content, timestamp (within 60s), and sender
+        const conversationId = DMLib.Pure.Conversation.computeConversationId(
+          messageWithMetadata.participants || [],
+          messageWithMetadata.subject || ''
+        );
+        const conversationMessages = prev.messagingState.conversationMessages[conversationId] || [];
+        
+        // Find optimistic message that matches
+        const optimisticIndex = messageWithMetadata.event.pubkey === user.pubkey
+          ? conversationMessages.findIndex(msg =>
+              msg.isSending &&
+              msg.event.pubkey === messageWithMetadata.event.pubkey &&
+              msg.event.content === messageWithMetadata.event.content &&
+              Math.abs(msg.event.created_at - messageWithMetadata.event.created_at) <= 60
+            )
+          : -1;
+        
+        // If we found a matching optimistic message, remove it before adding the real one
+        let stateToUpdate = prev.messagingState;
+        if (optimisticIndex !== -1) {
+          const filteredMessages = conversationMessages.filter((_, idx) => idx !== optimisticIndex);
+          stateToUpdate = {
+            ...prev.messagingState,
+            conversationMessages: {
+              ...prev.messagingState.conversationMessages,
+              [conversationId]: filteredMessages,
+            },
+          };
+        }
+        
         const updatedState = DMLib.Pure.Sync.addMessageToState(
-          prev.messagingState,
-          messagesWithMetadata[0],
+          stateToUpdate,
+          messageWithMetadata,
           user.pubkey
         );
         
-        console.log('[NewDM] ✅ Added message to state, updating UI');
+        // Check if message was actually added (addMessageToState returns early if duplicate)
+        const finalMessages = updatedState.conversationMessages[conversationId] || [];
+        const wasAdded = finalMessages.some(msg => {
+          // For NIP-17, use giftWrapId for matching (inner message has no ID)
+          if (messageWithMetadata.giftWrapId) {
+            return msg.giftWrapId === messageWithMetadata.giftWrapId;
+          }
+          // For NIP-04, use message ID
+          return msg.id === messageWithMetadata.event.id;
+        });
+        
         return { ...prev, messagingState: updatedState };
       });
     } catch (error) {
@@ -560,14 +613,204 @@ export const NewDMProvider = ({ children, config }: NewDMProviderProps) => {
     })();
   }, [user?.pubkey, nostr, discoveryRelays]);
   
-  // TODO: Not yet implemented - stub implementations
-  const sendMessage = useCallback(async (_params: {
+  const { mutateAsync: createEvent } = useNostrPublish();
+  const { toast } = useToast();
+  
+  // Use ref to access current messaging state in mutations
+  const messagingStateRef = useRef<MessagingState | null>(null);
+  
+  // Keep ref in sync with context
+  useEffect(() => {
+    messagingStateRef.current = context.messagingState;
+  }, [context.messagingState]);
+
+  // Write messaging state to cache
+  const writeToCache = useCallback(async () => {
+    if (!user?.pubkey || !context.messagingState) return;
+
+    try {
+      // Update lastCacheTime before saving
+      const stateToSave: MessagingState = {
+        ...context.messagingState,
+        syncState: {
+          ...context.messagingState.syncState,
+          lastCacheTime: Date.now(),
+        },
+      };
+      
+      await DMLib.Impure.Cache.saveToCache(user.pubkey, stateToSave);
+    } catch (error) {
+      console.error('[NewDM] Error writing to cache:', error);
+    }
+  }, [user?.pubkey, context.messagingState]);
+
+  // Trigger debounced write
+  const triggerDebouncedWrite = useCallback(() => {
+    if (debouncedWriteRef.current) {
+      clearTimeout(debouncedWriteRef.current);
+    }
+    debouncedWriteRef.current = setTimeout(() => {
+      writeToCache();
+      debouncedWriteRef.current = null;
+    }, DEBOUNCED_WRITE_DELAY);
+  }, [writeToCache]);
+
+  // Watch messaging state and save to cache
+  useEffect(() => {
+    if (!user?.pubkey || !context.messagingState || context.isLoading) return;
+    
+    // Don't save during initial load phases
+    if (context.phase === NEW_DM_PHASES.CACHE || context.phase === NEW_DM_PHASES.INITIAL_QUERY) return;
+    
+    triggerDebouncedWrite();
+  }, [user?.pubkey, context.messagingState, context.isLoading, context.phase, triggerDebouncedWrite]);
+
+  // Helper: Get inbox relays for a pubkey from participants state
+  const getInboxRelaysForPubkey = useCallback(async (pubkey: string): Promise<string[]> => {
+    const relays = messagingStateRef.current?.participants[pubkey]?.derivedRelays;
+    if (!relays?.length) throw new Error(`Participant ${pubkey.substring(0, 8)}... not found in messaging state`);
+    return relays;
+  }, []);
+
+  // Send NIP-04 Message (internal)
+  const sendNIP4Message = useCallback(async (
+    recipientPubkey: string,
+    content: string,
+    attachments: FileAttachment[] = []
+  ): Promise<NostrEvent> => {
+    if (!user) throw new Error('User is not logged in');
+    const userInbox = messagingStateRef.current?.participants[user.pubkey]?.derivedRelays;
+    if (!userInbox?.length) throw new Error('User inbox relays not found');
+    const recipientInbox = await getInboxRelaysForPubkey(recipientPubkey);
+    return DMLib.Impure.Message.sendNIP04Message(
+      nostr,
+      user.signer,
+      user.pubkey,
+      recipientPubkey,
+      content,
+      attachments,
+      userInbox,
+      recipientInbox,
+      createEvent
+    );
+  }, [user, nostr, createEvent, getInboxRelaysForPubkey]);
+
+  // Send NIP-17 Message (internal)
+  const sendNIP17Message = useCallback(async (
+    recipients: string[],
+    content: string,
+    attachments: FileAttachment[] = []
+  ): Promise<NostrEvent> => {
+    if (!user) throw new Error('User is not logged in');
+    return DMLib.Impure.Message.sendNIP17Message(
+      nostr,
+      user.signer,
+      user.pubkey,
+      recipients,
+      content,
+      attachments,
+      getInboxRelaysForPubkey
+    );
+  }, [user, nostr, getInboxRelaysForPubkey]);
+
+  // Send message
+  const sendMessage = useCallback(async (params: {
     recipientPubkey: string;
     content: string;
     protocol: MessageProtocol;
+    attachments?: FileAttachment[];
   }) => {
-    console.log('[NewDM] sendMessage not yet implemented');
-  }, []);
+    if (!user?.pubkey || !context.messagingState) {
+      console.warn('[NewDM] Cannot send message: missing user or messagingState');
+      return;
+    }
+
+    const { recipientPubkey, content, protocol = MESSAGE_PROTOCOL.NIP17, attachments } = params;
+
+    // Parse conversation ID to get participants
+    const { participantPubkeys: allParticipants, subject } = DMLib.Pure.Conversation.parseConversationId(recipientPubkey);
+    
+    // Recipients are everyone except the sender
+    let recipients = allParticipants.filter(p => p !== user.pubkey);
+    
+    // For self-messaging, ensure we include ourselves as the recipient
+    if (recipients.length === 0 && allParticipants.length === 1) {
+      recipients = [user.pubkey];
+    }
+
+    // Create optimistic message
+    const optimisticId = `optimistic-${Date.now()}-${Math.random()}`;
+    const now = Math.floor(Date.now() / 1000);
+    
+    // Create optimistic inner event (kind 4, 14, or 15)
+    const optimisticEvent: NostrEvent = {
+      id: optimisticId,
+      kind: protocol === MESSAGE_PROTOCOL.NIP04 ? 4 : (attachments && attachments.length > 0 ? 15 : 14),
+      pubkey: user.pubkey,
+      created_at: now,
+      tags: recipients.map(p => ['p', p]),
+      content: content, // Plaintext for optimistic message
+      sig: '',
+    };
+
+    // Create MessageWithMetadata for optimistic message
+    const optimisticMessageWithMetadata: DMLib.MessageWithMetadata = {
+      event: optimisticEvent,
+      senderPubkey: user.pubkey,
+      participants: [user.pubkey, ...recipients],
+      subject: subject || '',
+    };
+
+    // Add optimistic message to state
+    setContext(prev => {
+      if (!prev.messagingState) return prev;
+      
+      const updatedState = DMLib.Pure.Sync.addMessageToState(
+        prev.messagingState,
+        optimisticMessageWithMetadata,
+        user.pubkey
+      );
+      
+      // Mark the optimistic message as sending
+      const conversationId = recipientPubkey;
+      const conversationMessages = updatedState.conversationMessages[conversationId] || [];
+      const optimisticMessage = conversationMessages.find(msg => msg.id === optimisticId);
+      
+      if (optimisticMessage) {
+        optimisticMessage.isSending = true;
+        optimisticMessage.clientFirstSeen = Date.now();
+      } 
+      
+      return { ...prev, messagingState: updatedState };
+    });
+
+    try {
+      if (protocol === MESSAGE_PROTOCOL.NIP04) {
+        await sendNIP4Message(recipients[0], content, attachments);
+      } else if (protocol === MESSAGE_PROTOCOL.NIP17) {
+        await sendNIP17Message(recipients, content, attachments);
+      }
+    } catch (error) {
+      console.error(`[NewDM] Failed to send ${protocol} message:`, error);
+      toast({ title: 'Failed to send message', description: error instanceof Error ? error.message : 'Unknown error', variant: 'destructive' });
+      // Remove optimistic message on error
+      setContext(prev => {
+        if (!prev.messagingState) return prev;
+        const conversationMessages = prev.messagingState.conversationMessages[recipientPubkey] || [];
+        const filteredMessages = conversationMessages.filter(msg => msg.id !== optimisticId);
+        return {
+          ...prev,
+          messagingState: {
+            ...prev.messagingState,
+            conversationMessages: {
+              ...prev.messagingState.conversationMessages,
+              [recipientPubkey]: filteredMessages,
+            },
+          },
+        };
+      });
+    }
+  }, [user, context.messagingState, sendNIP4Message, sendNIP17Message, toast]);
   
   const getConversationRelays = useCallback((conversationId: string): ConversationRelayInfo[] => {
     if (!user?.pubkey || !context.messagingState) {
@@ -606,10 +849,14 @@ export const NewDMProvider = ({ children, config }: NewDMProviderProps) => {
     }
   }, [user?.pubkey, cleanupSubscriptions]);
   
-  // Cleanup subscriptions on unmount or user change
+  // Cleanup subscriptions and debounced writes on unmount or user change
   useEffect(() => {
     return () => {
       cleanupSubscriptions();
+      if (debouncedWriteRef.current) {
+        clearTimeout(debouncedWriteRef.current);
+        debouncedWriteRef.current = null;
+      }
     };
   }, [user?.pubkey]);
   
