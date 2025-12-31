@@ -752,11 +752,13 @@ export const NewDMProvider = ({ children, config }: NewDMProviderProps) => {
     };
 
     // Create MessageWithMetadata for optimistic message
+    // For NIP-17 (kind 14/15), set giftWrapId since inner events don't have IDs
     const optimisticMessageWithMetadata: DMLib.MessageWithMetadata = {
       event: optimisticEvent,
       senderPubkey: user.pubkey,
       participants: [user.pubkey, ...recipients],
       subject: subject || '',
+      ...(protocol === MESSAGE_PROTOCOL.NIP17 && { giftWrapId: optimisticId }),
     };
 
     // Add optimistic message to state
@@ -769,9 +771,14 @@ export const NewDMProvider = ({ children, config }: NewDMProviderProps) => {
         user.pubkey
       );
       
+      // Compute the conversation ID the same way addMessageToState does
+      const computedConversationId = DMLib.Pure.Conversation.computeConversationId(
+        optimisticMessageWithMetadata.participants || [],
+        optimisticMessageWithMetadata.subject || ''
+      );
+      
       // Mark the optimistic message as sending
-      const conversationId = recipientPubkey;
-      const conversationMessages = updatedState.conversationMessages[conversationId] || [];
+      const conversationMessages = updatedState.conversationMessages[computedConversationId] || [];
       const optimisticMessage = conversationMessages.find(msg => msg.id === optimisticId);
       
       if (optimisticMessage) {

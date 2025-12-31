@@ -741,14 +741,22 @@ export const NewDMChatArea = ({ conversationId, onBack, className }: DMChatAreaP
   const allowSelection = protocolMode === PROTOCOL_MODE.NIP04_OR_NIP17;
 
   // Auto-scroll to bottom when new messages arrive
+  // Use the last message's id/timestamp as dependency to catch both new messages and replacements
+  const lastMessageKey = messages.length > 0 
+    ? `${messages[messages.length - 1].id}-${messages[messages.length - 1].event.created_at}`
+    : '';
+  
   useEffect(() => {
-    if (scrollAreaRef.current) {
-      const scrollContainer = scrollAreaRef.current.querySelector('[data-radix-scroll-area-viewport]');
-      if (scrollContainer) {
-        scrollContainer.scrollTop = scrollContainer.scrollHeight;
+    // Use requestAnimationFrame to ensure DOM has updated before scrolling
+    requestAnimationFrame(() => {
+      if (scrollAreaRef.current) {
+        const scrollContainer = scrollAreaRef.current.querySelector('[data-radix-scroll-area-viewport]');
+        if (scrollContainer) {
+          scrollContainer.scrollTop = scrollContainer.scrollHeight;
+        }
       }
-    }
-  }, [messages.length]);
+    });
+  }, [lastMessageKey]);
 
   const handleSend = useCallback(async () => {
     if (!messageText.trim() || !conversationId || !user) return;
