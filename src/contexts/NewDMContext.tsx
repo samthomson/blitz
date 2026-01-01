@@ -21,6 +21,8 @@ import type { NostrEvent } from '@nostrify/nostrify';
 import type { FileAttachment } from '@/lib/dmLib';
 
 const MESSAGES_PER_PAGE = 25;
+const DEFAULT_RELAY_TTL = 7 * 24 * 60 * 60 * 1000; // 7 days in milliseconds
+const DEFAULT_QUERY_LIMIT = 20000;
 
 // Re-export FileAttachment from dmLib
 export type { FileAttachment } from '@/lib/dmLib';
@@ -332,8 +334,10 @@ export const NewDMProvider = ({ children, config }: NewDMProviderProps) => {
   const nip4SubscriptionRef = useRef<{ close: () => void } | null>(null);
   const nip17SubscriptionRef = useRef<{ close: () => void } | null>(null);
   const debouncedWriteRef = useRef<NodeJS.Timeout | null>(null);
+  const relayRefreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
   
   const DEBOUNCED_WRITE_DELAY = 5000;
+  const RELAY_REFRESH_CHECK_INTERVAL = 30000; // 30 seconds
   
   const { toast } = useToast();
   const { mutateAsync: createEvent } = useNostrPublish();
@@ -618,8 +622,8 @@ export const NewDMProvider = ({ children, config }: NewDMProviderProps) => {
         const settings: DMSettings = {
           discoveryRelays,
           relayMode: appConfig.relayMode,
-          relayTTL: 7 * 24 * 60 * 60 * 1000,
-          queryLimit: 20000,
+          relayTTL: DEFAULT_RELAY_TTL,
+          queryLimit: DEFAULT_QUERY_LIMIT,
         };
         
         const finalState = await initialiseMessaging(nostr, user.signer, user.pubkey, settings, updateContext);
@@ -695,6 +699,84 @@ export const NewDMProvider = ({ children, config }: NewDMProviderProps) => {
     
     triggerDebouncedWrite();
   }, [user?.pubkey, context.messagingState, context.isLoading, context.phase, triggerDebouncedWrite]);
+
+  // Background task: Refresh stale participant relay lists
+  useEffect(() => {
+    if (!user?.pubkey || !context.messagingState || context.isLoading) return;
+    
+    // Don't run during initial load
+    if (context.phase === NEW_DM_PHASES.CACHE || context.phase === NEW_DM_PHASES.INITIAL_QUERY) return;
+    
+    const checkAndRefreshStaleRelays = async () => {
+      if (!context.messagingState) return;
+      
+      const now = Date.now();
+      const staleParticipants: string[] = [];
+      
+      // Find participants with expired relay lists (excluding current user)
+      for (const [pubkey, participant] of Object.entries(context.messagingState.participants)) {
+        if (pubkey === user.pubkey) continue; // Skip current user
+        
+        const age = now - participant.lastFetched;
+        if (age > DEFAULT_RELAY_TTL) {
+          staleParticipants.push(pubkey);
+        }
+      }
+      
+      if (staleParticipants.length === 0) {
+        return; // Nothing to refresh
+      }
+      
+      console.log(`[NewDM] Background refresh: ${staleParticipants.length} stale participants found`, 
+        staleParticipants.map(p => p.substring(0, 8)));
+      
+      try {
+        // Fetch fresh relay lists for stale participants
+        const refreshedParticipants = await DMLib.Impure.Participant.fetchAndMergeParticipants(
+          nostr,
+          context.messagingState.participants,
+          staleParticipants,
+          appConfig.relayMode,
+          discoveryRelays
+        );
+        
+        // Update messaging state with refreshed participants using helper
+        setContext(prev => {
+          if (!prev.messagingState) return prev;
+          
+          const updatedParticipants = DMLib.Pure.Participant.mergeParticipants(
+            prev.messagingState.participants,
+            refreshedParticipants
+          );
+          
+          return {
+            ...prev,
+            messagingState: {
+              ...prev.messagingState,
+              participants: updatedParticipants,
+            },
+          };
+        });
+        
+        console.log(`[NewDM] Background refresh: Updated ${staleParticipants.length} participants`);
+      } catch (error) {
+        console.error('[NewDM] Background refresh failed:', error);
+      }
+    };
+    
+    // Run check immediately on mount
+    checkAndRefreshStaleRelays();
+    
+    // Set up periodic check
+    relayRefreshIntervalRef.current = setInterval(checkAndRefreshStaleRelays, RELAY_REFRESH_CHECK_INTERVAL);
+    
+    return () => {
+      if (relayRefreshIntervalRef.current) {
+        clearInterval(relayRefreshIntervalRef.current);
+        relayRefreshIntervalRef.current = null;
+      }
+    };
+  }, [user?.pubkey, context.messagingState, context.isLoading, context.phase, nostr, appConfig.relayMode, discoveryRelays]);
 
   // Helper: Get inbox relays for a pubkey from participants state
   const getInboxRelaysForPubkey = useCallback(async (pubkey: string): Promise<string[]> => {
@@ -894,7 +976,7 @@ export const NewDMProvider = ({ children, config }: NewDMProviderProps) => {
     await clearCacheAndRefetch();
   }, [clearCacheAndRefetch]);
   
-  // Cleanup subscriptions and debounced writes on unmount or user change
+  // Cleanup subscriptions, debounced writes, and refresh interval on unmount or user change
   useEffect(() => {
     return () => {
       cleanupSubscriptions();
@@ -902,8 +984,12 @@ export const NewDMProvider = ({ children, config }: NewDMProviderProps) => {
         clearTimeout(debouncedWriteRef.current);
         debouncedWriteRef.current = null;
       }
+      if (relayRefreshIntervalRef.current) {
+        clearInterval(relayRefreshIntervalRef.current);
+        relayRefreshIntervalRef.current = null;
+      }
     };
-  }, [user?.pubkey]);
+  }, [user?.pubkey, cleanupSubscriptions]);
   
   // Detect hard refresh shortcut (Ctrl+Shift+R / Cmd+Shift+R) to clear cache
   useEffect(() => {
