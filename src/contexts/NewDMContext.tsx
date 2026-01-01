@@ -617,7 +617,7 @@ export const NewDMProvider = ({ children, config }: NewDMProviderProps) => {
         console.log('[NewDM] Starting initialization for', user.pubkey.substring(0, 8));
         const settings: DMSettings = {
           discoveryRelays,
-          relayMode: RELAY_MODE.HYBRID,
+          relayMode: appConfig.relayMode,
           relayTTL: 7 * 24 * 60 * 60 * 1000,
           queryLimit: 20000,
         };

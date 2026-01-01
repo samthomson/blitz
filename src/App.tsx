@@ -14,6 +14,7 @@ import { NostrLoginProvider } from '@nostrify/react/login';
 import { AppProvider } from '@/components/AppProvider';
 import { NWCProvider } from '@/contexts/NWCContext';
 import { AppConfig } from '@/contexts/AppContext';
+import { RELAY_MODE } from '@/lib/dmTypes';
 import { NewDMProvider } from '@/contexts/NewDMContext';
 import AppRouter from './AppRouter';
 
@@ -50,6 +51,7 @@ const defaultConfig: AppConfig = {
     'wss://relay.primal.net',
     'wss://nos.lol',
   ],
+  relayMode: RELAY_MODE.HYBRID,
   renderInlineMedia: true,
 };
 

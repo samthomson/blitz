@@ -1,4 +1,5 @@
 import { createContext } from "react";
+import type { RelayMode } from "@/lib/dmTypes";
 
 export type Theme = "dark" | "light" | "system";
 
@@ -7,6 +8,8 @@ export interface AppConfig {
   theme: Theme;
   /** Discovery relays - used to find NIP-65 and as default relay pool */
   discoveryRelays: string[];
+  /** Relay connection mode - how to derive relay sets for messaging */
+  relayMode: RelayMode;
   /** Developer mode toggle */
   devMode?: boolean;
   /** Render images and media inline in messages */

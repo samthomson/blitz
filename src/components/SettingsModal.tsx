@@ -1,4 +1,4 @@
-import { MessageSquare, Moon, Sun, Palette, Database, Code, X, ArrowLeft, ChevronRight, Radio, AlertTriangle, User } from 'lucide-react';
+import { MessageSquare, Moon, Sun, Palette, Database, Code, X, ArrowLeft, ChevronRight, Radio, AlertTriangle, User, Wifi } from 'lucide-react';
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { useTheme } from '@/hooks/useTheme';
@@ -113,7 +113,81 @@ function MessagesContent() {
   );
 }
 
-function RelaysContent() {
+function RelayModeContent() {
+  const { config, updateConfig } = useAppContext();
+  const relayMode = config.relayMode;
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <h3 className="text-sm font-semibold mb-3">Connection Mode</h3>
+        <p className="text-xs text-muted-foreground mb-4">
+          Choose how the app discovers and connects to relays for direct messages
+        </p>
+        <div className="space-y-2">
+          <button
+            onClick={() => updateConfig((current) => ({ ...current, relayMode: RELAY_MODE.DISCOVERY }))}
+            className={`w-full text-left p-3 rounded-lg border transition-colors ${
+              relayMode === RELAY_MODE.DISCOVERY
+                ? 'border-primary bg-primary/5'
+                : 'border-border hover:bg-accent'
+            }`}
+          >
+            <div className="flex items-start gap-3">
+              <Radio className={`h-5 w-5 mt-0.5 ${relayMode === RELAY_MODE.DISCOVERY ? 'text-primary' : 'text-muted-foreground'}`} />
+              <div className="flex-1">
+                <div className="font-medium">Discovery Only</div>
+                <div className="text-xs text-muted-foreground mt-1">
+                  Use only the discovery relays from the Relay List tab. Fastest but may miss messages.
+                </div>
+              </div>
+            </div>
+          </button>
+
+          <button
+            onClick={() => updateConfig((current) => ({ ...current, relayMode: RELAY_MODE.HYBRID }))}
+            className={`w-full text-left p-3 rounded-lg border transition-colors ${
+              relayMode === RELAY_MODE.HYBRID
+                ? 'border-primary bg-primary/5'
+                : 'border-border hover:bg-accent'
+            }`}
+          >
+            <div className="flex items-start gap-3">
+              <Radio className={`h-5 w-5 mt-0.5 ${relayMode === RELAY_MODE.HYBRID ? 'text-primary' : 'text-muted-foreground'}`} />
+              <div className="flex-1">
+                <div className="font-medium">Hybrid (Recommended)</div>
+                <div className="text-xs text-muted-foreground mt-1">
+                  Combine discovery relays with user-specific inbox relays. Best balance of speed and reliability.
+                </div>
+              </div>
+            </div>
+          </button>
+
+          <button
+            onClick={() => updateConfig((current) => ({ ...current, relayMode: RELAY_MODE.STRICT_OUTBOX }))}
+            className={`w-full text-left p-3 rounded-lg border transition-colors ${
+              relayMode === RELAY_MODE.STRICT_OUTBOX
+                ? 'border-primary bg-primary/5'
+                : 'border-border hover:bg-accent'
+            }`}
+          >
+            <div className="flex items-start gap-3">
+              <Radio className={`h-5 w-5 mt-0.5 ${relayMode === RELAY_MODE.STRICT_OUTBOX ? 'text-primary' : 'text-muted-foreground'}`} />
+              <div className="flex-1">
+                <div className="font-medium">Strict Outbox</div>
+                <div className="text-xs text-muted-foreground mt-1">
+                  Use only each user&apos;s published inbox relays (NIP-65/NIP-17). Most private but may be slower.
+                </div>
+              </div>
+            </div>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RelayListContent() {
   return (
     <div className="space-y-4">
       <RelayListManager />
@@ -165,11 +239,11 @@ export function SettingsModal({ open, onOpenChange, defaultTab = 'appearance' }:
     if (open) {
       setInitialSettings({ 
         discoveryRelays: [...config.discoveryRelays],
-        relayMode: RELAY_MODE.HYBRID, // TODO: Get from config when user-configurable
+        relayMode: config.relayMode,
       });
       setShowReloadConfirm(false);
     }
-  }, [open, config.discoveryRelays]);
+  }, [open, config.discoveryRelays, config.relayMode]);
   
   const failedRelayCount = useMemo(() => {
     if (!user || !messagingState) return 0;
@@ -185,10 +259,10 @@ export function SettingsModal({ open, onOpenChange, defaultTab = 'appearance' }:
     const initialFingerprint = DMLib.Pure.Settings.computeFingerprint(initialSettings);
     const currentFingerprint = DMLib.Pure.Settings.computeFingerprint({ 
       discoveryRelays: config.discoveryRelays,
-      relayMode: RELAY_MODE.HYBRID, // TODO: Get from config when user-configurable
+      relayMode: config.relayMode,
     });
     return initialFingerprint !== currentFingerprint;
-  }, [initialSettings, config.discoveryRelays]);
+  }, [initialSettings, config.discoveryRelays, config.relayMode]);
   
   // Handle close - check if settings changed
   const handleClose = useCallback(() => {
@@ -234,6 +308,7 @@ export function SettingsModal({ open, onOpenChange, defaultTab = 'appearance' }:
     updateConfig((prev) => ({
       ...prev,
       discoveryRelays: [...initialSettings.discoveryRelays],
+      relayMode: initialSettings.relayMode,
     }));
     
     toast({
@@ -244,17 +319,17 @@ export function SettingsModal({ open, onOpenChange, defaultTab = 'appearance' }:
 
   return (
     <>
-      <Dialog 
-        open={open} 
-        onOpenChange={(isOpen) => {
+    <Dialog 
+      open={open} 
+      onOpenChange={(isOpen) => {
           if (!isOpen) {
             handleClose();
           } else {
-            onOpenChange(isOpen);
+        onOpenChange(isOpen);
           }
-          if (!isOpen) setMobileCategory(null);
-        }}
-      >
+        if (!isOpen) setMobileCategory(null);
+      }}
+    >
       <DialogContent className="max-w-[95vw] w-full sm:max-w-2xl md:max-w-[700px] h-[90vh] md:h-[85vh] md:min-h-[600px] p-0 flex flex-col [&>button]:hidden md:[&>button]:block" aria-describedby={undefined}>
         {/* Mobile: Single-line header with arrow, title, and close */}
         <DialogHeader className="md:hidden flex flex-row items-center justify-between px-4 sm:px-6 pt-4 sm:pt-6">
@@ -337,23 +412,38 @@ export function SettingsModal({ open, onOpenChange, defaultTab = 'appearance' }:
                 <ChevronRight className="h-5 w-5 text-muted-foreground" />
               </Button>
 
-                <Button
-                  variant="ghost"
-                  className="w-full justify-between h-auto py-4 px-4"
-                  onClick={() => setMobileCategory('Relays')}
-                >
-                  <div className="flex items-center gap-3">
-                    <Radio className="h-5 w-5" />
-                    <div className="flex flex-col items-start">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium">Relays</span>
-                        {failedRelayCount > 0 && <AlertTriangle className="h-4 w-4 text-red-500" />}
-                      </div>
-                      <span className="text-xs text-muted-foreground">Manage your relay list</span>
-                    </div>
+              <Button
+                variant="ghost"
+                className="w-full justify-between h-auto py-4 px-4"
+                onClick={() => setMobileCategory('Relay Mode')}
+              >
+                <div className="flex items-center gap-3">
+                  <Wifi className="h-5 w-5" />
+                  <div className="flex flex-col items-start">
+                    <span className="font-medium">Relay Mode</span>
+                    <span className="text-xs text-muted-foreground">Connection strategy</span>
                   </div>
-                  <ChevronRight className="h-5 w-5 text-muted-foreground" />
-                </Button>
+                </div>
+                <ChevronRight className="h-5 w-5 text-muted-foreground" />
+              </Button>
+
+              <Button
+                variant="ghost"
+                className="w-full justify-between h-auto py-4 px-4"
+                onClick={() => setMobileCategory('Relays')}
+              >
+                <div className="flex items-center gap-3">
+                  <Radio className="h-5 w-5" />
+                  <div className="flex flex-col items-start">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">Relays</span>
+                      {failedRelayCount > 0 && <AlertTriangle className="h-4 w-4 text-red-500" />}
+                    </div>
+                    <span className="text-xs text-muted-foreground">Manage your relay list</span>
+                  </div>
+                </div>
+                <ChevronRight className="h-5 w-5 text-muted-foreground" />
+              </Button>
 
               <Button
                 variant="ghost"
@@ -397,9 +487,13 @@ export function SettingsModal({ open, onOpenChange, defaultTab = 'appearance' }:
             <div className="px-4 py-4">
               <MessagesContent />
             </div>
+          ) : mobileCategory === 'Relay Mode' ? (
+            <div className="px-4 py-4">
+              <RelayModeContent />
+            </div>
           ) : mobileCategory === 'Relays' ? (
             <div className="px-4 py-4">
-              <RelaysContent />
+              <RelayListContent />
             </div>
           ) : mobileCategory === 'Storage' ? (
             <div className="px-4 py-4">
@@ -436,6 +530,13 @@ export function SettingsModal({ open, onOpenChange, defaultTab = 'appearance' }:
               >
                 <MessageSquare className="h-4 w-4" />
                 Messages
+              </TabsTrigger>
+              <TabsTrigger 
+                value="relay-mode" 
+                className="w-full justify-start gap-3 data-[state=active]:bg-accent"
+              >
+                <Wifi className="h-4 w-4" />
+                Relay Mode
               </TabsTrigger>
               <TabsTrigger 
                 value="relays" 
@@ -476,8 +577,12 @@ export function SettingsModal({ open, onOpenChange, defaultTab = 'appearance' }:
                 <MessagesContent />
               </TabsContent>
 
+              <TabsContent value="relay-mode" className="mt-0 animate-in fade-in-0 duration-200">
+                <RelayModeContent />
+              </TabsContent>
+
               <TabsContent value="relays" className="mt-0 animate-in fade-in-0 duration-200">
-                <RelaysContent />
+                <RelayListContent />
               </TabsContent>
 
               <TabsContent value="storage" className="mt-0 animate-in fade-in-0 duration-200">
