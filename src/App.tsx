@@ -13,9 +13,9 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { NostrLoginProvider } from '@nostrify/react/login';
 import { AppProvider } from '@/components/AppProvider';
 import { NWCProvider } from '@/contexts/NWCContext';
-import { DMProvider, type DMConfig } from '@/contexts/DMContext';
 import { AppConfig } from '@/contexts/AppContext';
-import { PROTOCOL_MODE } from '@/lib/dmConstants';
+import { RELAY_MODE } from '@/lib/dmTypes';
+import { NewDMProvider } from '@/contexts/NewDMContext';
 import AppRouter from './AppRouter';
 
 const head = createHead({
@@ -51,18 +51,8 @@ const defaultConfig: AppConfig = {
     'wss://relay.primal.net',
     'wss://nos.lol',
   ],
+  relayMode: RELAY_MODE.HYBRID,
   renderInlineMedia: true,
-};
-
-const dmConfig: DMConfig = {
-  // Enable or disable DMs entirely
-  enabled: true, // Set to false to completely disable messaging functionality
-
-  // Choose one protocol mode:
-  // PROTOCOL_MODE.NIP04_ONLY - Force NIP-04 (legacy) only
-  // PROTOCOL_MODE.NIP17_ONLY - Force NIP-17 (private) only
-  // PROTOCOL_MODE.NIP04_OR_NIP17 - Allow users to choose between NIP-04 and NIP-17 (defaults to NIP-17)
-  protocolMode: PROTOCOL_MODE.NIP04_OR_NIP17,
 };
 
 export function App() {
@@ -72,16 +62,16 @@ export function App() {
         <PersistQueryClientProvider client={queryClient} persistOptions={persistOptions}>
           <NostrLoginProvider storageKey='nostr:login'>
             <NostrProvider>
-              <NWCProvider>
-                <DMProvider config={dmConfig}>
+              <NewDMProvider>
+                <NWCProvider>
                   <TooltipProvider>
                     <Toaster />
                     <Suspense>
                       <AppRouter />
                     </Suspense>
                   </TooltipProvider>
-                </DMProvider>
-              </NWCProvider>
+                </NWCProvider>
+              </NewDMProvider>
             </NostrProvider>
           </NostrLoginProvider>
         </PersistQueryClientProvider>

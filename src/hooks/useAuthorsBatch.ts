@@ -142,10 +142,13 @@ export function useAuthorsBatch(pubkeys: string[]) {
   }, [relayGroup, processChunk]);
 
   // Main effect: split pubkeys into chunks and fetch them
+  // Stable empty Map to avoid unnecessary re-renders
+  const emptyMap = useMemo(() => new Map(), []);
   const pubkeysString = pubkeys.join(',');
+  
   useEffect(() => {
     if (pubkeys.length === 0) {
-      setAuthorsMap(new Map());
+      setAuthorsMap(emptyMap);
       setLoadedCount(0);
       setIsFetching(false);
       fetchedChunks.current.clear();
@@ -222,7 +225,7 @@ export function useAuthorsBatch(pubkeys: string[]) {
         abortControllerRef.current.abort();
       }
     };
-  }, [pubkeysString, pubkeys.length, pubkeys, fetchChunk, queryClient]); // Re-run when pubkeys change
+  }, [pubkeysString, fetchChunk, queryClient]); // Re-run when pubkeys change (tracked by pubkeysString)
 
   return {
     data: authorsMap,

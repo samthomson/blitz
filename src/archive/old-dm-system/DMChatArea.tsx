@@ -6,7 +6,8 @@ import { useAuthorsBatch } from '@/hooks/useAuthorsBatch';
 import { useAppContext } from '@/hooks/useAppContext';
 import { MESSAGE_PROTOCOL, PROTOCOL_MODE, type MessageProtocol } from '@/lib/dmConstants';
 import { getDisplayName } from '@/lib/genUserName';
-import { formatConversationTime, formatFullDateTime, parseConversationId, getPubkeyColor } from '@/lib/dmUtils';
+import { formatConversationTime, formatFullDateTime, getPubkeyColor } from '@/lib/dmUtils';
+import { Pure as DMLib } from '@/lib/dmLib';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -430,7 +431,7 @@ const ParticipantInfoModal = ({ open, onOpenChange, conversationId }: {
   const [copiedPubkey, setCopiedPubkey] = useState<string | null>(null);
   
   // Parse all participants
-  const allParticipants = useMemo(() => parseConversationId(conversationId), [conversationId]);
+  const allParticipants = useMemo(() => DMLib.Conversation.parseConversationId(conversationId).participantPubkeys, [conversationId]);
   
   // Fetch all participant profiles
   const authorsData = useAuthorsBatch(allParticipants);
@@ -555,8 +556,8 @@ const RelayInfoModal = ({ open, onOpenChange, conversationId }: { open: boolean;
 
   // Get all participant pubkeys and fetch their metadata
   const otherParticipants = useMemo(() => {
-    const allParticipants = parseConversationId(conversationId);
-    return allParticipants.filter(pk => pk !== user?.pubkey);
+    const { participantPubkeys } = DMLib.Conversation.parseConversationId(conversationId);
+    return participantPubkeys.filter(pk => pk !== user?.pubkey);
   }, [conversationId, user?.pubkey]);
   
   const authorsData = useAuthorsBatch(otherParticipants);
@@ -604,7 +605,7 @@ const ChatHeader = ({ conversationId, onBack }: { conversationId: string; onBack
   const [showParticipantModal, setShowParticipantModal] = useState(false);
   
   // Parse conversation participants and exclude current user from display
-  const allParticipants = parseConversationId(conversationId);
+  const { participantPubkeys: allParticipants } = DMLib.Conversation.parseConversationId(conversationId);
   const conversationParticipants = allParticipants.filter(pk => pk !== user?.pubkey);
 
   // Check if this is a self-messaging conversation
@@ -732,8 +733,9 @@ export const DMChatArea = ({ conversationId, onBack, className }: DMChatAreaProp
   const devMode = config.devMode ?? false;
 
   // Check if this is a group chat (3+ participants including current user)
-  const allParticipants = parseConversationId(conversationId || '');
-  const isGroupChat = allParticipants.length >= 3;
+  const isGroupChat = conversationId 
+    ? DMLib.Conversation.parseConversationId(conversationId).participantPubkeys.length >= 3
+    : false;
 
   const [messageText, setMessageText] = useState('');
   const [isSending, setIsSending] = useState(false);

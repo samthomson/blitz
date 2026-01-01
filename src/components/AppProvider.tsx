@@ -2,6 +2,7 @@ import { ReactNode, useEffect } from 'react';
 import { z } from 'zod';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { AppContext, type AppConfig, type AppContextType, type Theme } from '@/contexts/AppContext';
+import { RELAY_MODE } from '@/lib/dmTypes';
 
 interface AppProviderProps {
   children: ReactNode;
@@ -15,6 +16,7 @@ interface AppProviderProps {
 const AppConfigSchema = z.object({
   theme: z.enum(['dark', 'light', 'system']),
   discoveryRelays: z.array(z.string().url()),
+  relayMode: z.enum([RELAY_MODE.DISCOVERY, RELAY_MODE.HYBRID, RELAY_MODE.STRICT_OUTBOX]),
   devMode: z.boolean().optional(),
   renderInlineMedia: z.boolean().optional(),
 }) satisfies z.ZodType<AppConfig>;

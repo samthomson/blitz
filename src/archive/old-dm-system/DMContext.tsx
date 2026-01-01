@@ -6,7 +6,8 @@ import { useAppContext } from '@/hooks/useAppContext';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { useToast } from '@/hooks/useToast';
 import { useRelayLists, type RelayListResult } from '@/hooks/useRelayList';
-import { validateDMEvent, createConversationId, parseConversationId } from '@/lib/dmUtils';
+import { validateDMEvent } from '@/lib/dmUtils';
+import { Pure as DMLib } from '@/lib/dmLib';
 import { LOADING_PHASES, type LoadingPhase, PROTOCOL_MODE, type ProtocolMode } from '@/lib/dmConstants';
 import { fetchRelayListsBulk, extractInboxRelays } from '@/lib/relayUtils';
 import { NSecSigner, type NostrEvent } from '@nostrify/nostrify';
@@ -889,8 +890,8 @@ export function DMProvider({ children, config }: DMProviderProps) {
           }
 
           // Use consistent conversation ID format (same as NIP-17)
-          // For NIP-04, this is always a 1-on-1 conversation
-          const conversationId = createConversationId([userPubkey, otherPubkey]);
+          // For NIP-04, this is always a 1-on-1 conversation (no subject)
+          const conversationId = DMLib.Conversation.computeConversationId([userPubkey, otherPubkey], '');
 
           if (!newState.has(conversationId)) {
             newState.set(conversationId, createEmptyParticipant());
@@ -1181,8 +1182,8 @@ export function DMProvider({ children, config }: DMProviderProps) {
       decryptedMessage.clientFirstSeen = Date.now();
     }
 
-    // Use consistent conversation ID format (same as NIP-17)
-    const conversationId = createConversationId([user.pubkey, otherPubkey]);
+    // Use consistent conversation ID format (same as NIP-17, no subject)
+    const conversationId = DMLib.Conversation.computeConversationId([user.pubkey, otherPubkey], '');
 
     addMessageToState(decryptedMessage, conversationId, MESSAGE_PROTOCOL.NIP04, user.pubkey);
   }, [user, decryptNIP4Message, addMessageToState]);
@@ -1270,9 +1271,12 @@ export function DMProvider({ children, config }: DMProviderProps) {
       // Get the sender from the seal (the person who actually sent the message)
       const sender = sealEvent.pubkey;
 
-      // Create conversation ID from all participants (sender + recipients)
+      // Extract subject from inner message tags (NIP-17 supports optional subject)
+      const subject = messageEvent.tags.find(t => t[0] === 'subject')?.[1] || '';
+
+      // Create conversation ID from all participants (sender + recipients) and subject
       const allParticipants = [sender, ...allRecipients];
-      const conversationPartner = createConversationId(allParticipants);
+      const conversationPartner = DMLib.Conversation.computeConversationId(allParticipants, subject);
 
       return {
         processedMessage: {
@@ -1776,8 +1780,8 @@ export function DMProvider({ children, config }: DMProviderProps) {
       // Extract unique participant pubkeys from all conversations
       const pubkeys: string[] = [];
       conversations.forEach(conv => {
-        const participants = parseConversationId(conv.id);
-        pubkeys.push(...participants);
+        const { participantPubkeys } = DMLib.Conversation.parseConversationId(conv.id);
+        pubkeys.push(...participantPubkeys);
       });
       const uniquePubkeys = Array.from(new Set(pubkeys)).filter(p => p !== userPubkey);
 
@@ -1892,7 +1896,7 @@ export function DMProvider({ children, config }: DMProviderProps) {
 
     if (typeof recipientPubkey === 'string' && recipientPubkey.startsWith('group:')) {
       // Extract pubkeys from group ID (which includes sender)
-      const allParticipants = parseConversationId(recipientPubkey);
+      const { participantPubkeys: allParticipants } = DMLib.Conversation.parseConversationId(recipientPubkey);
       // Recipients are everyone except the sender
       recipients = allParticipants.filter(p => p !== userPubkey);
       
@@ -1906,8 +1910,8 @@ export function DMProvider({ children, config }: DMProviderProps) {
       recipients = [recipientPubkey];
     }
 
-    // Create conversation ID from all participants (including current user)
-    const conversationId = createConversationId([userPubkey, ...recipients]);
+    // Create conversation ID from all participants (including current user, no subject)
+    const conversationId = DMLib.Conversation.computeConversationId([userPubkey, ...recipients], '');
 
     console.log('[DM] Sending message:', {
       recipients,
@@ -1950,7 +1954,7 @@ export function DMProvider({ children, config }: DMProviderProps) {
   // Get all relay info for a conversation, grouped by relay
   // This is reactive - when cache updates, result updates
   const getConversationRelays = useCallback((conversationId: string): ConversationRelayInfo[] => {
-    const participants = parseConversationId(conversationId);
+    const { participantPubkeys: participants } = DMLib.Conversation.parseConversationId(conversationId);
     const relayMap = new Map<string, Array<{ pubkey: string; isCurrentUser: boolean; source: string }>>();
 
     // Normalize relay URL by removing trailing slash

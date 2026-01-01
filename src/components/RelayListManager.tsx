@@ -1,16 +1,16 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Plus, Trash2, Radio, Search, AlertTriangle, RefreshCw, MessageSquare, ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useRelayLists, type RelayEntry } from '@/hooks/useRelayList';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useAppContext } from '@/hooks/useAppContext';
-import { useDMContext } from '@/contexts/DMContext';
+import { useNewDMContext } from '@/contexts/NewDMContext';
+import type { RelayInfo } from '@/lib/dmTypes';
 
 // Popular relay suggestions for each tab
 const DISCOVERY_SUGGESTIONS = [
@@ -116,12 +116,15 @@ function RelayInputWithSuggestions({ suggestions, onAdd, currentRelays, disabled
   );
 }
 
-function DiscoveryRelaysTab() {
+function DiscoveryRelaysTab({ failedRelays }: { failedRelays: Array<[string, RelayInfo]> }) {
   const { config, updateConfig } = useAppContext();
   const [edited, setEdited] = useState<string[] | null>(null);
   
   const current = edited !== null ? edited : config.discoveryRelays;
   const hasChanges = edited !== null;
+
+  const failedRelaySet = new Set(failedRelays.map(([relay]) => relay));
+  const failedRelayErrors = new Map(failedRelays.map(([relay, info]) => [relay, info.lastQueryError || 'Unknown connection error']));
 
   const add = (url: string) => {
     const input = url.trim();
@@ -149,14 +152,26 @@ function DiscoveryRelaysTab() {
           </div>
         ) : (
           <div className="space-y-2">
-            {current.map(url => (
-              <div key={url} className="flex items-center gap-3 p-3 border rounded-lg">
-                <p className="flex-1 text-sm font-mono truncate">{url}</p>
-                <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => remove(url)}>
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </div>
-            ))}
+            {current.map(url => {
+              const isFailed = failedRelaySet.has(url);
+              return (
+                <div 
+                  key={url} 
+                  className={`flex items-center gap-3 p-3 border rounded-lg ${isFailed ? 'border-red-500 bg-red-500/10' : ''}`}
+                >
+                  {isFailed && <AlertTriangle className="h-4 w-4 text-red-500 flex-shrink-0" />}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-mono truncate">{url}</p>
+                    {isFailed && (
+                      <p className="text-xs text-red-500 mt-1">{failedRelayErrors.get(url)}</p>
+                    )}
+                  </div>
+                  <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive flex-shrink-0" onClick={() => remove(url)}>
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
@@ -178,12 +193,15 @@ function DiscoveryRelaysTab() {
   );
 }
 
-function DMInboxTab() {
+function DMInboxTab({ failedRelays }: { failedRelays: Array<[string, RelayInfo]> }) {
   const { user } = useCurrentUser();
   const { data, isLoading, isFetching, refetch, publishDMInbox, isPublishingDM } = useRelayLists();
   const [edited, setEdited] = useState<string[] | null>(null);
   
   const current = edited !== null ? edited : (data?.dmInbox?.relays || []);
+
+  const failedRelaySet = new Set(failedRelays.map(([relay]) => relay));
+  const failedRelayErrors = new Map(failedRelays.map(([relay, info]) => [relay, info.lastQueryError || 'Unknown connection error']));
 
   // Reset edited state when data changes (after successful mutation)
   useEffect(() => {
@@ -252,14 +270,26 @@ function DMInboxTab() {
           </div>
         ) : (
           <div className="space-y-2">
-            {current.map(url => (
-              <div key={url} className="flex items-center gap-3 p-3 border rounded-lg">
-                <p className="flex-1 text-xs font-mono truncate">{url}</p>
-                <Button variant="ghost" size="sm" onClick={() => remove(url)} disabled={!user} className="h-7 w-7 p-0">
-                  <Trash2 className="h-3.5 w-3.5" />
-                </Button>
-              </div>
-            ))}
+            {current.map(url => {
+              const isFailed = failedRelaySet.has(url);
+              return (
+                <div 
+                  key={url} 
+                  className={`flex items-center gap-3 p-3 border rounded-lg ${isFailed ? 'border-red-500 bg-red-500/10' : ''}`}
+                >
+                  {isFailed && <AlertTriangle className="h-4 w-4 text-red-500 flex-shrink-0" />}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-mono truncate">{url}</p>
+                    {isFailed && (
+                      <p className="text-xs text-red-500 mt-1">{failedRelayErrors.get(url)}</p>
+                    )}
+                  </div>
+                  <Button variant="ghost" size="sm" onClick={() => remove(url)} disabled={!user} className="h-7 w-7 p-0 flex-shrink-0">
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
@@ -280,13 +310,15 @@ function DMInboxTab() {
   );
 }
 
-function NIP65Tab() {
+function NIP65Tab({ failedRelays }: { failedRelays: Array<[string, RelayInfo]> }) {
   const { user } = useCurrentUser();
   const { data, isLoading, isFetching, refetch, publishNIP65, isPublishingNIP65 } = useRelayLists();
-  const { relayError, clearRelayError } = useDMContext();
   const [edited, setEdited] = useState<RelayEntry[] | null>(null);
   
   const current = edited !== null ? edited : (data?.nip65?.relays || []);
+
+  const failedRelaySet = new Set(failedRelays.map(([relay]) => relay));
+  const failedRelayErrors = new Map(failedRelays.map(([relay, info]) => [relay, info.lastQueryError || 'Unknown connection error']));
 
   // Reset edited state when data changes (after successful mutation)
   useEffect(() => {
@@ -351,21 +383,6 @@ function NIP65Tab() {
 
   return (
     <TabsContent value="nip65" className="space-y-6 mt-4">
-      {relayError && (
-        <Alert variant="destructive">
-          <AlertTriangle className="h-4 w-4" />
-          <AlertDescription className="flex items-start justify-between gap-4">
-            <div className="flex-1">
-              <p className="font-semibold mb-2">{relayError.message}</p>
-              <p className="text-sm mb-2">Failed to query {relayError.totalRelays} relay{relayError.totalRelays > 1 ? 's' : ''}:</p>
-              <ul className="text-sm space-y-1 ml-4 mb-2">
-                {relayError.failedRelays.map(url => <li key={url} className="font-mono text-xs list-disc">{url}</li>)}
-              </ul>
-            </div>
-            <Button variant="ghost" size="sm" onClick={clearRelayError} className="flex-shrink-0">Dismiss</Button>
-          </AlertDescription>
-        </Alert>
-      )}
       <div>
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-semibold">NIP-65 (kind 10002)</h3>
@@ -390,24 +407,36 @@ function NIP65Tab() {
           </div>
         ) : (
           <div className="space-y-2">
-            {current.map(r => (
-              <div key={r.url} className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 p-3 border rounded-lg">
-                <p className="flex-1 text-sm font-mono truncate">{r.url}</p>
-                <div className="flex items-center gap-3">
-                  <div className="flex items-center gap-1.5">
-                    <Switch id={`r-${r.url}`} checked={r.read} onCheckedChange={() => toggleRead(r.url)} disabled={isPublishingNIP65} className="scale-75" />
-                    <Label htmlFor={`r-${r.url}`} className="text-xs cursor-pointer">Read</Label>
+            {current.map(r => {
+              const isFailed = failedRelaySet.has(r.url);
+              return (
+                <div 
+                  key={r.url} 
+                  className={`flex flex-col gap-2 p-3 border rounded-lg ${isFailed ? 'border-red-500 bg-red-500/10' : ''}`}
+                >
+                  <div className="flex items-center gap-2">
+                    {isFailed && <AlertTriangle className="h-4 w-4 text-red-500 flex-shrink-0" />}
+                    <p className="flex-1 text-sm font-mono truncate">{r.url}</p>
                   </div>
-                  <div className="flex items-center gap-1.5">
-                    <Switch id={`w-${r.url}`} checked={r.write} onCheckedChange={() => toggleWrite(r.url)} disabled={isPublishingNIP65} className="scale-75" />
-                    <Label htmlFor={`w-${r.url}`} className="text-xs cursor-pointer">Write</Label>
+                  {isFailed && (
+                    <p className="text-xs text-red-500 ml-6">{failedRelayErrors.get(r.url)}</p>
+                  )}
+                  <div className="flex items-center gap-3 ml-6">
+                    <div className="flex items-center gap-1.5">
+                      <Switch id={`r-${r.url}`} checked={r.read} onCheckedChange={() => toggleRead(r.url)} disabled={isPublishingNIP65} className="scale-75" />
+                      <Label htmlFor={`r-${r.url}`} className="text-xs cursor-pointer">Read</Label>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <Switch id={`w-${r.url}`} checked={r.write} onCheckedChange={() => toggleWrite(r.url)} disabled={isPublishingNIP65} className="scale-75" />
+                      <Label htmlFor={`w-${r.url}`} className="text-xs cursor-pointer">Write</Label>
+                    </div>
+                    <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => remove(r.url)} disabled={isPublishingNIP65}>
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
                   </div>
-                  <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => remove(r.url)} disabled={isPublishingNIP65}>
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
@@ -429,46 +458,55 @@ function NIP65Tab() {
 }
 
 export function RelayListManager() {
-  const { relayError, clearRelayError } = useDMContext();
+  const { messagingState } = useNewDMContext();
+  const { user } = useCurrentUser();
+  const { config } = useAppContext();
+  const { data } = useRelayLists();
+
+  // Compute failed relays for each category
+  const failedRelays = useMemo(() => {
+    if (!messagingState?.relayInfo || !user?.pubkey) {
+      return { discovery: [], nip65: [], dmInbox: [] };
+    }
+
+    const userRelays = new Set(messagingState.participants[user.pubkey]?.derivedRelays || []);
+    const discoveryRelays = new Set(config.discoveryRelays || []);
+    const nip65Relays = new Set((data?.nip65?.relays || []).map(r => r.url));
+    const dmInboxRelays = new Set(data?.dmInbox?.relays || []);
+
+    const allFailed = Object.entries(messagingState.relayInfo)
+      .filter(([relay, info]) => userRelays.has(relay) && !info.lastQuerySucceeded);
+
+    return {
+      discovery: allFailed.filter(([relay]) => discoveryRelays.has(relay)),
+      nip65: allFailed.filter(([relay]) => nip65Relays.has(relay)),
+      dmInbox: allFailed.filter(([relay]) => dmInboxRelays.has(relay)),
+    };
+  }, [messagingState, user, config.discoveryRelays, data]);
 
   return (
     <Tabs defaultValue="dm-inbox" className="w-full">
-      {relayError && (
-        <Alert variant="destructive" className="mb-4">
-          <AlertTriangle className="h-4 w-4" />
-          <AlertDescription className="flex items-center justify-between">
-            <span>{relayError.message}</span>
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              onClick={clearRelayError}
-              className="h-auto py-1 px-2"
-            >
-              Dismiss
-            </Button>
-          </AlertDescription>
-        </Alert>
-      )}
-      
       <TabsList className="grid w-full grid-cols-3">
         <TabsTrigger value="discovery" className="px-2 sm:px-3">
           <Search className="h-4 w-4 mr-2 hidden sm:inline-block" />
           Discovery
+          {failedRelays.discovery.length > 0 && <AlertTriangle className="h-3 w-3 ml-2 text-red-500" />}
         </TabsTrigger>
         <TabsTrigger value="nip65" className="px-2 sm:px-3">
           <Radio className="h-4 w-4 mr-2 hidden sm:inline-block" />
           Inbox/Outbox
+          {failedRelays.nip65.length > 0 && <AlertTriangle className="h-3 w-3 ml-2 text-red-500" />}
         </TabsTrigger>
         <TabsTrigger value="dm-inbox" className="px-2 sm:px-3">
           <MessageSquare className="h-4 w-4 mr-2 hidden sm:inline-block" />
           DMs
-          {relayError && <AlertTriangle className="h-3 w-3 ml-2 text-destructive" />}
+          {failedRelays.dmInbox.length > 0 && <AlertTriangle className="h-3 w-3 ml-2 text-red-500" />}
         </TabsTrigger>
       </TabsList>
 
-      <DiscoveryRelaysTab />
-      <NIP65Tab />
-      <DMInboxTab />
+      <DiscoveryRelaysTab failedRelays={failedRelays.discovery} />
+      <NIP65Tab failedRelays={failedRelays.nip65} />
+      <DMInboxTab failedRelays={failedRelays.dmInbox} />
 
     </Tabs>
   );

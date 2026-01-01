@@ -10,7 +10,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { MessageSquarePlus, X, Check } from 'lucide-react';
 import { useToast } from '@/hooks/useToast';
-import { useDMContext } from '@/contexts/DMContext';
+import { useNewDMContext } from '@/contexts/NewDMContext';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useFollows } from '@/hooks/useFollows';
 import { useAuthorsBatch } from '@/hooks/useAuthorsBatch';
@@ -19,7 +19,7 @@ import { Badge } from '@/components/ui/badge';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 import { getDisplayName } from '@/lib/genUserName';
-import { createConversationId, parseConversationId } from '@/lib/dmUtils';
+import { Pure as DMLib } from '@/lib/dmLib';
 
 interface NewConversationDialogProps {
   onStartConversation: (pubkey: string) => void;
@@ -37,8 +37,13 @@ export function NewConversationDialog({ onStartConversation }: NewConversationDi
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
-  const { conversations } = useDMContext();
+  const { messagingState } = useNewDMContext();
   const { user } = useCurrentUser();
+  
+  const conversationsList = useMemo(() => {
+    if (!messagingState?.conversationMetadata) return [];
+    return Object.values(messagingState.conversationMetadata);
+  }, [messagingState?.conversationMetadata]);
   const { data: follows = [], isLoading: isLoadingFollows } = useFollows();
 
   // Debounce search input
@@ -49,9 +54,9 @@ export function NewConversationDialog({ onStartConversation }: NewConversationDi
 
   const allContacts = useMemo(() => {
     // Extract individual pubkeys from conversations (including group members)
-    const knownConversationPubkeys = conversations
+    const knownConversationPubkeys = conversationsList
       .filter(c => c.isKnown)
-      .flatMap(c => parseConversationId(c.pubkey));
+      .flatMap(c => c.participantPubkeys);
     
     // Include current user explicitly (for self-messaging support)
     const allPubkeys = [
@@ -61,7 +66,7 @@ export function NewConversationDialog({ onStartConversation }: NewConversationDi
     ].filter((pk): pk is string => !!pk);
     
     return Array.from(new Set(allPubkeys));
-  }, [follows, conversations, user?.pubkey]);
+  }, [follows, conversationsList, user?.pubkey]);
 
   // Include selected pubkeys in metadata fetch (for manually added pubkeys)
   const pubkeysToFetch = useMemo(() => {
@@ -209,7 +214,8 @@ export function NewConversationDialog({ onStartConversation }: NewConversationDi
     }
 
     // Create conversation ID from all participants (including current user)
-    const conversationId = createConversationId([user.pubkey, ...selectedPubkeys]);
+    // Empty string for subject (no subject for direct 1-on-1 or group chats)
+    const conversationId = DMLib.Conversation.computeConversationId([user.pubkey, ...selectedPubkeys], '');
     onStartConversation(conversationId);
     
     if (selectedPubkeys.length > 1) {
@@ -458,6 +464,7 @@ export function NewConversationDialog({ onStartConversation }: NewConversationDi
                             onClick={() => {
                               handleToggleContact(pubkey);
                               setSearchInput('');
+                              setPopoverOpen(false);
                               // Keep the index position
                               setHighlightedIndex(index);
                             }}
