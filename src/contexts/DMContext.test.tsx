@@ -498,11 +498,11 @@ describe('DMContext - Message Creation', () => {
       });
 
       // Both messages should go to the same conversation
-      // Conversation ID should be "group:user-pubkey-123"
+      // Conversation ID should be "group:user-pubkey-123:" (note the trailing colon)
       await waitFor(() => {
         const conversations = result.current.conversations;
         expect(conversations).toHaveLength(1);
-        expect(conversations[0].id).toBe(`group:${mockUser.pubkey}`);
+        expect(conversations[0].id).toBe(`group:${mockUser.pubkey}:`);
       });
     });
 
