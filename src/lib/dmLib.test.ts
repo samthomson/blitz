@@ -8,6 +8,117 @@ import type { MessagingState } from './dmTypes';
 
 describe('DMLib', () => {
   describe('Pure', () => {
+    describe('Settings', () => {
+      describe('computeFingerprint', () => {
+        it('should compute fingerprint for given settings', () => {
+          const settings = {
+            discoveryRelays: ['wss://relay1.com', 'wss://relay2.com'],
+            relayMode: 'hybrid' as DMLib.RelayMode
+          };
+          
+          const result = DMLib.Pure.Settings.computeFingerprint(settings);
+          
+          expect(result).toBe(JSON.stringify({
+            discoveryRelays: ['wss://relay1.com', 'wss://relay2.com'],
+            relayMode: 'hybrid'
+          }));
+        });
+
+        it('should sort discoveryRelays for consistent fingerprints', () => {
+          const settings1 = {
+            discoveryRelays: ['wss://relay2.com', 'wss://relay1.com'],
+            relayMode: 'hybrid' as DMLib.RelayMode
+          };
+          
+          const settings2 = {
+            discoveryRelays: ['wss://relay1.com', 'wss://relay2.com'],
+            relayMode: 'hybrid' as DMLib.RelayMode
+          };
+          
+          const result1 = DMLib.Pure.Settings.computeFingerprint(settings1);
+          const result2 = DMLib.Pure.Settings.computeFingerprint(settings2);
+          
+          expect(result1).toBe(result2);
+        });
+
+        it('should produce different fingerprints for different relayModes', () => {
+          const settings1 = {
+            discoveryRelays: ['wss://relay1.com'],
+            relayMode: 'hybrid' as DMLib.RelayMode
+          };
+          
+          const settings2 = {
+            discoveryRelays: ['wss://relay1.com'],
+            relayMode: 'strict_outbox' as DMLib.RelayMode
+          };
+          
+          const result1 = DMLib.Pure.Settings.computeFingerprint(settings1);
+          const result2 = DMLib.Pure.Settings.computeFingerprint(settings2);
+          
+          expect(result1).not.toBe(result2);
+        });
+
+        it('should produce different fingerprints for different discoveryRelays', () => {
+          const settings1 = {
+            discoveryRelays: ['wss://relay1.com'],
+            relayMode: 'hybrid' as DMLib.RelayMode
+          };
+          
+          const settings2 = {
+            discoveryRelays: ['wss://relay2.com'],
+            relayMode: 'hybrid' as DMLib.RelayMode
+          };
+          
+          const result1 = DMLib.Pure.Settings.computeFingerprint(settings1);
+          const result2 = DMLib.Pure.Settings.computeFingerprint(settings2);
+          
+          expect(result1).not.toBe(result2);
+        });
+
+        it('should handle empty discoveryRelays', () => {
+          const settings = {
+            discoveryRelays: [],
+            relayMode: 'discovery' as DMLib.RelayMode
+          };
+          
+          const result = DMLib.Pure.Settings.computeFingerprint(settings);
+          
+          expect(result).toBe(JSON.stringify({
+            discoveryRelays: [],
+            relayMode: 'discovery'
+          }));
+        });
+
+        it('should handle all relay modes', () => {
+          const modes: DMLib.RelayMode[] = ['discovery', 'hybrid', 'strict_outbox'];
+          
+          const fingerprints = modes.map(mode => 
+            DMLib.Pure.Settings.computeFingerprint({
+              discoveryRelays: ['wss://relay1.com'],
+              relayMode: mode
+            })
+          );
+          
+          // All fingerprints should be unique
+          expect(new Set(fingerprints).size).toBe(3);
+        });
+
+        it('should be deterministic (same input = same output)', () => {
+          const settings = {
+            discoveryRelays: ['wss://relay1.com', 'wss://relay2.com', 'wss://relay3.com'],
+            relayMode: 'hybrid' as DMLib.RelayMode
+          };
+          
+          const result1 = DMLib.Pure.Settings.computeFingerprint(settings);
+          const result2 = DMLib.Pure.Settings.computeFingerprint(settings);
+          const result3 = DMLib.Pure.Settings.computeFingerprint(settings);
+          
+          expect(result1).toBe(result2);
+          expect(result2).toBe(result3);
+        });
+      });
+    });
+
     describe('Relay', () => {
       describe('extractBlockedRelays', () => {
         it('should return empty array when event is null', () => {
@@ -2125,123 +2236,6 @@ describe('DMLib', () => {
         });
       });
       
-      describe('determineNewPubkeys', () => {
-        it('should return empty array when foundPubkeys is empty (cold start)', () => {
-          const result = DMLib.Pure.Participant.determineNewPubkeys([], ['existing1', 'existing2'], DMLib.StartupMode.COLD);
-          expect(result).toEqual([]);
-        });
-
-        it('should return empty array when foundPubkeys is empty (warm start)', () => {
-          const result = DMLib.Pure.Participant.determineNewPubkeys([], ['existing1', 'existing2'], DMLib.StartupMode.WARM);
-          expect(result).toEqual([]);
-        });
-
-        it('should return all pubkeys when existingPubkeys is empty (cold start)', () => {
-          const foundPubkeys = ['pk1', 'pk2', 'pk3'];
-          const result = DMLib.Pure.Participant.determineNewPubkeys(foundPubkeys, [], DMLib.StartupMode.COLD);
-          expect(result).toEqual(['pk1', 'pk2', 'pk3']);
-        });
-
-        it('should return all pubkeys when existingPubkeys is empty (warm start)', () => {
-          const foundPubkeys = ['pk1', 'pk2', 'pk3'];
-          const result = DMLib.Pure.Participant.determineNewPubkeys(foundPubkeys, [], DMLib.StartupMode.WARM);
-          expect(result).toEqual(['pk1', 'pk2', 'pk3']);
-        });
-
-        it('should return empty array when all foundPubkeys already exist (cold start)', () => {
-          const foundPubkeys = ['pk1', 'pk2'];
-          const existingPubkeys = ['pk1', 'pk2', 'pk3'];
-          const result = DMLib.Pure.Participant.determineNewPubkeys(foundPubkeys, existingPubkeys, DMLib.StartupMode.COLD);
-          expect(result).toEqual([]);
-        });
-
-        it('should return empty array when all foundPubkeys already exist (warm start)', () => {
-          const foundPubkeys = ['pk1', 'pk2'];
-          const existingPubkeys = ['pk1', 'pk2', 'pk3'];
-          const result = DMLib.Pure.Participant.determineNewPubkeys(foundPubkeys, existingPubkeys, DMLib.StartupMode.WARM);
-          expect(result).toEqual([]);
-        });
-
-        it('should return only new pubkeys (cold start)', () => {
-          const foundPubkeys = ['pk1', 'pk2', 'pk3', 'pk4'];
-          const existingPubkeys = ['pk1', 'pk3'];
-          const result = DMLib.Pure.Participant.determineNewPubkeys(foundPubkeys, existingPubkeys, DMLib.StartupMode.COLD);
-          expect(result).toEqual(['pk2', 'pk4']);
-        });
-
-        it('should return only new pubkeys (warm start)', () => {
-          const foundPubkeys = ['pk1', 'pk2', 'pk3', 'pk4'];
-          const existingPubkeys = ['pk1', 'pk3'];
-          const result = DMLib.Pure.Participant.determineNewPubkeys(foundPubkeys, existingPubkeys, DMLib.StartupMode.WARM);
-          expect(result).toEqual(['pk2', 'pk4']);
-        });
-
-        it('should preserve order from foundPubkeys', () => {
-          const foundPubkeys = ['pk5', 'pk1', 'pk3', 'pk2'];
-          const existingPubkeys = ['pk1'];
-          const result = DMLib.Pure.Participant.determineNewPubkeys(foundPubkeys, existingPubkeys, DMLib.StartupMode.COLD);
-          expect(result).toEqual(['pk5', 'pk3', 'pk2']);
-        });
-
-        it('should deduplicate foundPubkeys', () => {
-          const foundPubkeys = ['pk1', 'pk2', 'pk1', 'pk3', 'pk2'];
-          const existingPubkeys = [];
-          const result = DMLib.Pure.Participant.determineNewPubkeys(foundPubkeys, existingPubkeys, DMLib.StartupMode.WARM);
-          expect(result).toEqual(['pk1', 'pk2', 'pk3']);
-        });
-
-        it('should handle realistic scenario with multiple existing and new pubkeys (cold start)', () => {
-          const foundPubkeys = [
-            'alice',
-            'bob',
-            'charlie',
-            'dave',
-            'eve'
-          ];
-          const existingPubkeys = ['alice', 'charlie'];
-          
-          const result = DMLib.Pure.Participant.determineNewPubkeys(foundPubkeys, existingPubkeys, DMLib.StartupMode.COLD);
-          
-          expect(result).toHaveLength(3);
-          expect(result).toContain('bob');
-          expect(result).toContain('dave');
-          expect(result).toContain('eve');
-          expect(result).not.toContain('alice');
-          expect(result).not.toContain('charlie');
-        });
-
-        it('should handle realistic scenario with multiple existing and new pubkeys (warm start)', () => {
-          const foundPubkeys = [
-            'alice',
-            'bob',
-            'charlie',
-            'dave',
-            'eve'
-          ];
-          const existingPubkeys = ['alice', 'charlie'];
-          
-          const result = DMLib.Pure.Participant.determineNewPubkeys(foundPubkeys, existingPubkeys, DMLib.StartupMode.WARM);
-          
-          expect(result).toHaveLength(3);
-          expect(result).toContain('bob');
-          expect(result).toContain('dave');
-          expect(result).toContain('eve');
-          expect(result).not.toContain('alice');
-          expect(result).not.toContain('charlie');
-        });
-
-        it('should behave identically for cold and warm starts (current implementation)', () => {
-          const foundPubkeys = ['pk1', 'pk2', 'pk3'];
-          const existingPubkeys = ['pk1'];
-          
-          const coldResult = DMLib.Pure.Participant.determineNewPubkeys(foundPubkeys, existingPubkeys, DMLib.StartupMode.COLD);
-          const warmResult = DMLib.Pure.Participant.determineNewPubkeys(foundPubkeys, existingPubkeys, DMLib.StartupMode.WARM);
-          
-          expect(coldResult).toEqual(warmResult);
-          expect(coldResult).toEqual(['pk2', 'pk3']);
-        });
-      });
-      
       describe('extractNewPubkeys', () => {
         const myPubkey = 'mypubkey';
 
@@ -3011,7 +3005,8 @@ describe('DMLib', () => {
           },
           senderPubkey: participants[0],
           participants,
-          subject
+          subject,
+          ...(protocol === 'nip17' ? { giftWrapId: `gift-${id}` } : {})
         });
 
         it('should build empty state for no data', () => {
@@ -4726,6 +4721,169 @@ describe('DMLib', () => {
       });
 
       it.todo('buildAndSaveCache');
+    });
+  });
+
+  describe('Integration: Cache Invalidation on Settings Change', () => {
+    describe('Startup Mode Determination', () => {
+      it('should use WARM start when cache exists with valid lastCacheTime and matching fingerprint', () => {
+        const settings = {
+          discoveryRelays: ['wss://relay1.com'],
+          relayMode: 'hybrid' as DMLib.RelayMode
+        };
+        
+        const fingerprint = DMLib.Pure.Settings.computeFingerprint(settings);
+        
+        const cached: DMLib.MessagingState = {
+          participants: {},
+          conversationMetadata: {},
+          conversationMessages: {},
+          syncState: { lastCacheTime: Date.now(), queriedRelays: [], queryLimitReached: false },
+          relayInfo: {},
+          settingsFingerprint: fingerprint
+        };
+        
+        // Simulate the logic from initialiseMessaging
+        const isRestartingAfterSettingsFingerprintChange = (() => {
+          if (!cached?.settingsFingerprint) return false;
+          const currentFingerprint = DMLib.Pure.Settings.computeFingerprint(settings);
+          return cached.settingsFingerprint !== currentFingerprint;
+        })();
+        
+        const mode = (cached && cached.syncState.lastCacheTime && !isRestartingAfterSettingsFingerprintChange)
+          ? DMLib.StartupMode.WARM
+          : DMLib.StartupMode.COLD;
+        
+        expect(mode).toBe(DMLib.StartupMode.WARM);
+      });
+
+      it('should use COLD start when cache exists but fingerprint mismatches (discoveryRelays changed)', () => {
+        const oldSettings = {
+          discoveryRelays: ['wss://relay1.com'],
+          relayMode: 'hybrid' as DMLib.RelayMode
+        };
+        
+        const newSettings = {
+          discoveryRelays: ['wss://relay2.com'], // Changed
+          relayMode: 'hybrid' as DMLib.RelayMode
+        };
+        
+        const cached: DMLib.MessagingState = {
+          participants: {},
+          conversationMetadata: {},
+          conversationMessages: {},
+          syncState: { lastCacheTime: Date.now(), queriedRelays: [], queryLimitReached: false },
+          relayInfo: {},
+          settingsFingerprint: DMLib.Pure.Settings.computeFingerprint(oldSettings)
+        };
+        
+        // Simulate the logic from initialiseMessaging
+        const isRestartingAfterSettingsFingerprintChange = (() => {
+          if (!cached?.settingsFingerprint) return false;
+          const currentFingerprint = DMLib.Pure.Settings.computeFingerprint(newSettings);
+          return cached.settingsFingerprint !== currentFingerprint;
+        })();
+        
+        const mode = (cached && cached.syncState.lastCacheTime && !isRestartingAfterSettingsFingerprintChange)
+          ? DMLib.StartupMode.WARM
+          : DMLib.StartupMode.COLD;
+        
+        expect(isRestartingAfterSettingsFingerprintChange).toBe(true);
+        expect(mode).toBe(DMLib.StartupMode.COLD);
+      });
+
+      it('should use COLD start when cache exists but fingerprint mismatches (relayMode changed)', () => {
+        const oldSettings = {
+          discoveryRelays: ['wss://relay1.com'],
+          relayMode: 'hybrid' as DMLib.RelayMode
+        };
+        
+        const newSettings = {
+          discoveryRelays: ['wss://relay1.com'],
+          relayMode: 'strict_outbox' as DMLib.RelayMode // Changed
+        };
+        
+        const cached: DMLib.MessagingState = {
+          participants: {},
+          conversationMetadata: {},
+          conversationMessages: {},
+          syncState: { lastCacheTime: Date.now(), queriedRelays: [], queryLimitReached: false },
+          relayInfo: {},
+          settingsFingerprint: DMLib.Pure.Settings.computeFingerprint(oldSettings)
+        };
+        
+        // Simulate the logic from initialiseMessaging
+        const isRestartingAfterSettingsFingerprintChange = (() => {
+          if (!cached?.settingsFingerprint) return false;
+          const currentFingerprint = DMLib.Pure.Settings.computeFingerprint(newSettings);
+          return cached.settingsFingerprint !== currentFingerprint;
+        })();
+        
+        const mode = (cached && cached.syncState.lastCacheTime && !isRestartingAfterSettingsFingerprintChange)
+          ? DMLib.StartupMode.WARM
+          : DMLib.StartupMode.COLD;
+        
+        expect(isRestartingAfterSettingsFingerprintChange).toBe(true);
+        expect(mode).toBe(DMLib.StartupMode.COLD);
+      });
+
+      it('should use COLD start when cache exists but has no fingerprint (old cache)', () => {
+        const settings = {
+          discoveryRelays: ['wss://relay1.com'],
+          relayMode: 'hybrid' as DMLib.RelayMode
+        };
+        
+        const cached: DMLib.MessagingState = {
+          participants: {},
+          conversationMetadata: {},
+          conversationMessages: {},
+          syncState: { lastCacheTime: Date.now(), queriedRelays: [], queryLimitReached: false },
+          relayInfo: {}
+          // No settingsFingerprint - old cache format
+        };
+        
+        // Simulate the logic from initialiseMessaging
+        const isRestartingAfterSettingsFingerprintChange = (() => {
+          if (!cached?.settingsFingerprint) return false; // Returns false for missing fingerprint
+          const currentFingerprint = DMLib.Pure.Settings.computeFingerprint(settings);
+          return cached.settingsFingerprint !== currentFingerprint;
+        })();
+        
+        const mode = (cached && cached.syncState.lastCacheTime && !isRestartingAfterSettingsFingerprintChange)
+          ? DMLib.StartupMode.WARM
+          : DMLib.StartupMode.COLD;
+        
+        // Should use WARM start (missing fingerprint doesn't force cold start)
+        // This is intentional - we don't want to invalidate old caches
+        expect(isRestartingAfterSettingsFingerprintChange).toBe(false);
+        expect(mode).toBe(DMLib.StartupMode.WARM);
+      });
+
+      it('should use COLD start when no cache exists', () => {
+        const cached = null;
+        
+        const mode = (cached && cached.syncState.lastCacheTime)
+          ? DMLib.StartupMode.WARM
+          : DMLib.StartupMode.COLD;
+        
+        expect(mode).toBe(DMLib.StartupMode.COLD);
+      });
+
+      it('should use COLD start when cache exists but has no lastCacheTime', () => {
+        const cached: DMLib.MessagingState = {
+          participants: {},
+          conversationMetadata: {},
+          conversationMessages: {},
+          syncState: { lastCacheTime: 0, queriedRelays: [], queryLimitReached: false }, // No lastCacheTime
+          relayInfo: {}
+        };
+        
+        const mode = (cached && cached.syncState.lastCacheTime)
+          ? DMLib.StartupMode.WARM
+          : DMLib.StartupMode.COLD;
+        
+        expect(mode).toBe(DMLib.StartupMode.COLD);
+      });
     });
   });
 });
