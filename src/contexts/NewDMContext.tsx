@@ -342,7 +342,6 @@ export const NewDMProvider = ({ children, config }: NewDMProviderProps) => {
   const DEBOUNCED_WRITE_DELAY = 5000;
   const RELAY_REFRESH_CHECK_INTERVAL = 30000; // 30 seconds
   
-  const { toast } = useToast();
   const { mutateAsync: createEvent } = useNostrPublish();
   
   // Stable callback - doesn't depend on context
