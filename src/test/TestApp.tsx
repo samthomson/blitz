@@ -6,6 +6,7 @@ import NostrProvider from '@/components/NostrProvider';
 import { AppProvider } from '@/components/AppProvider';
 import { NWCProvider } from '@/contexts/NWCContext';
 import { AppConfig } from '@/contexts/AppContext';
+import { RELAY_MODE } from '@/lib/dmTypes';
 
 interface TestAppProps {
   children: React.ReactNode;
@@ -24,6 +25,7 @@ export function TestApp({ children }: TestAppProps) {
   const defaultConfig: AppConfig = {
     theme: 'light',
     discoveryRelays: ['wss://relay.nostr.band'],
+    relayMode: RELAY_MODE.HYBRID,
   };
 
   return (

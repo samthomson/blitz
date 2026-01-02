@@ -34,6 +34,7 @@ export interface Conversation {
   isRequest: boolean;
   lastMessage: { decryptedContent?: string; error?: string } | null;
   hasDecryptionErrors: boolean; // True if any messages failed to decrypt
+  hasFailedRelays?: boolean; // True if any relays failed to connect (computed in UI)
 }
 
 export interface Message {
