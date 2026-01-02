@@ -79,3 +79,8 @@ export interface RelayListsResult {
   kind10006: NostrEvent | null;
 }
 
+export interface ConversationRelayInfo {
+  relay: string;
+  users: Array<{ pubkey: string; isCurrentUser: boolean; source: string }>;
+}
+

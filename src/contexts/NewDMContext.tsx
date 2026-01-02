@@ -16,7 +16,7 @@ import type {
 import * as DMLib from '@/lib/dmLib';
 import type { Signer } from '@/lib/dmLib';
 import { PROTOCOL_MODE, type ProtocolMode, type MessageProtocol, NEW_DM_PHASES, type NewDMPhase, MESSAGE_PROTOCOL } from '@/lib/dmConstants';
-import type { ConversationRelayInfo } from '@/contexts/DMContext';
+import type { ConversationRelayInfo } from '@/lib/dmTypes';
 import type { NostrEvent } from '@nostrify/nostrify';
 import type { FileAttachment } from '@/lib/dmLib';
 
