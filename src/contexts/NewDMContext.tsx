@@ -6,6 +6,7 @@ import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useAppContext } from '@/hooks/useAppContext';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { useToast } from '@/hooks/useToast';
+import { useNetworkState } from '@/hooks/useNetworkState';
 import type { NPool } from '@nostrify/nostrify';
 import { RELAY_MODE } from '@/lib/dmTypes';
 import type {
@@ -308,6 +309,8 @@ export const NewDMProvider = ({ children, config }: NewDMProviderProps) => {
   const { nostr } = useNostr();
   const { user } = useCurrentUser();
   const { config: appConfig, updateConfig } = useAppContext();
+  const { isOnline, wasOffline } = useNetworkState();
+  const { toast } = useToast();
   
   // Stabilize discovery relays reference to avoid triggering effects
   const discoveryRelays = useMemo(() => appConfig.discoveryRelays, [appConfig.discoveryRelays.join(',')]);
@@ -650,6 +653,25 @@ export const NewDMProvider = ({ children, config }: NewDMProviderProps) => {
       }
     })();
   }, [user?.pubkey, nostr, discoveryRelays]);
+  
+  // Handle network reconnection
+  useEffect(() => {
+    if (!isOnline) {
+      console.log('[NewDM] Network offline');
+      toast({
+        title: 'Connection lost',
+        description: 'You are offline. Messages will sync when connection is restored.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (wasOffline && user?.pubkey && context.messagingState) {
+      console.log('[NewDM] Network restored - restarting subscriptions');
+      toast({ title: 'Connection restored', description: 'Reconnecting...' });
+      startSubscriptions(context.messagingState);
+    }
+  }, [isOnline, wasOffline, user?.pubkey, context.messagingState, toast, startSubscriptions]);
   
   // Use ref to access current messaging state in mutations
   const messagingStateRef = useRef<MessagingState | null>(null);

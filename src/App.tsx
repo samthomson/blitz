@@ -16,6 +16,7 @@ import { NWCProvider } from '@/contexts/NWCContext';
 import { AppConfig } from '@/contexts/AppContext';
 import { RELAY_MODE } from '@/lib/dmTypes';
 import { NewDMProvider } from '@/contexts/NewDMContext';
+import { NetworkStatus } from '@/components/NetworkStatus';
 import AppRouter from './AppRouter';
 
 const head = createHead({
@@ -65,6 +66,7 @@ export function App() {
               <NewDMProvider>
                 <NWCProvider>
                   <TooltipProvider>
+                    <NetworkStatus />
                     <Toaster />
                     <Suspense>
                       <AppRouter />
