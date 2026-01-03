@@ -1,4 +1,4 @@
-# Doduo
+# Silent (formerly Doduo)
 
 A Nostr direct messaging client.
 

@@ -7,13 +7,14 @@ import { Button } from '@/components/ui/button';
 import { MessageSquare, Shield, Lock, Zap } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
 import { Moon, Sun } from 'lucide-react';
+import { APP_NAME } from '@/lib/constants';
 
 const Index = () => {
   const { user } = useCurrentUser();
   const { theme, setTheme } = useTheme();
 
   useSeoMeta({
-    title: 'Doduo - Private Messaging on Nostr',
+    title: `${APP_NAME} - Private Messaging on Nostr`,
     description: 'End-to-end encrypted messaging powered by Nostr. Signal-like privacy with decentralized infrastructure.',
   });
 
@@ -55,7 +56,7 @@ const Index = () => {
               <MessageSquare className="w-12 h-12 text-primary-foreground" strokeWidth={2.5} />
             </div>
             <h1 className="text-6xl font-bold bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent animate-in fade-in slide-in-from-bottom-4 duration-700">
-              Doduo
+              {APP_NAME}
             </h1>
             <p className="text-2xl text-muted-foreground font-medium animate-in fade-in slide-in-from-bottom-4 duration-700 delay-150">
               Private messaging, decentralized

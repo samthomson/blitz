@@ -1,6 +1,6 @@
 {
-  "name": "Doduo - Private Messaging",
-  "short_name": "Doduo",
+  "name": "Silent - Private Messaging",
+  "short_name": "Silent",
   "description": "End-to-end encrypted messaging powered by Nostr",
   "start_url": "/",
   "display": "standalone",

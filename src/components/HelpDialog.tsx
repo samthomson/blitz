@@ -9,6 +9,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { HelpCircle, Shield, Lock, Zap } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { APP_NAME } from '@/lib/constants';
 
 interface HelpDialogProps {
   open?: boolean;
@@ -27,7 +28,7 @@ export function HelpDialog({ open, onOpenChange }: HelpDialogProps = {}) {
       )}
       <DialogContent className="max-w-2xl max-h-[80vh]">
         <DialogHeader>
-          <DialogTitle>Welcome to Doduo</DialogTitle>
+          <DialogTitle>Welcome to {APP_NAME}</DialogTitle>
           <DialogDescription>
             Your private, decentralized messaging app powered by Nostr
           </DialogDescription>
@@ -152,7 +153,7 @@ export function HelpDialog({ open, onOpenChange }: HelpDialogProps = {}) {
             {/* Footer */}
             <section className="text-center pt-4 border-t">
               <p className="text-xs text-muted-foreground">
-                Doduo uses <strong>NIP-17</strong> for private messaging<br />
+                {APP_NAME} uses <strong>NIP-17</strong> for private messaging<br />
                 Learn more at{' '}
                 <a
                   href="https://github.com/nostr-protocol/nips/blob/master/17.md"

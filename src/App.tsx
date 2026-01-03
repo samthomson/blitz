@@ -38,7 +38,7 @@ const queryClient = new QueryClient({
 const persistOptions = {
   persister: createAsyncStoragePersister({
     storage: window.localStorage,
-    key: 'doduo:cache',
+    key: 'silent:cache',
   }),
   maxAge: Infinity, // Profile metadata rarely changes, cache indefinitely
 };
