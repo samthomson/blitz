@@ -774,7 +774,8 @@ const ChatHeader = ({
 
   // Derive display values
   const isMultiPerson = conversationParticipants.length > 1;
-  const baseName = getDisplayName(displayPubkey || '', metadata);
+  // For header, show full npub if no metadata (plenty of space here)
+  const baseName = metadata?.display_name || metadata?.name || (displayPubkey ? nip19.npubEncode(displayPubkey) : '');
   const displayName = isMultiPerson 
     ? null // Will use ParticipantNames component
     : isSelfMessaging
