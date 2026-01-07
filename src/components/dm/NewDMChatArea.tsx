@@ -597,10 +597,9 @@ const RelayInfoModal = ({ open, onOpenChange, conversationId }: { open: boolean;
                 <span className="font-semibold text-red-500">{failedCount} relay{failedCount > 1 ? 's' : ''} failed to connect.</span> Messages may be missing or delayed. Try:
               </p>
               <ul className="text-xs text-muted-foreground list-disc list-inside space-y-1 ml-2">
-                <li>Check your internet connection</li>
-                <li>Wait a few minutes and refresh</li>
                 <li>Ask participants to update their relay lists</li>
                 <li>Remove unreliable relays from your settings</li>
+                <li>Ensure your internet connection</li>
               </ul>
             </div>
           )}
