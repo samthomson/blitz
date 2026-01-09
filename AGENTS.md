@@ -1091,6 +1091,12 @@ describe('MyComponent', () => {
 
 ## AI Assistant Guidelines
 
+### User Interface Text
+- **Never use emojis or icons in user-facing text** - No emojis in toasts, alerts, buttons, or any UI text
+- Keep messages clear, concise, and professional
+- Avoid overly technical jargon - users don't need to know about IndexedDB, internal APIs, or implementation details
+- Focus on what the user needs to know, not how it works internally
+
 ### Git Workflow
 - **NEVER attempt to create git commits** - The user controls all commits themselves
 - You do not have permission to use git commit commands
