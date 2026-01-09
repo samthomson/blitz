@@ -1087,7 +1087,6 @@ export const NewDMChatArea = ({ conversationId, onBack, className }: DMChatAreaP
             onKeyDown={handleKeyDown}
             placeholder="Type a message... (Enter to send, Shift+Enter for new line)"
             className="min-h-[80px] resize-none"
-            disabled={isSending}
           />
           <div className="flex flex-col gap-2">
             <Button
