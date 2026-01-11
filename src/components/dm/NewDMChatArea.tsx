@@ -214,6 +214,14 @@ const MessageBubble = memo(({
   // The event is already the decrypted inner message (kind 4, 14, or 15)
   const messageEvent: NostrEvent = event;
 
+  // Determine content rendering mode (mutually exclusive)
+  const isDecryptionError = !!message.error;
+  const isEncryptedMedia = !isDecryptionError && shouldRenderMedia && !!fileMetadata && isFileAttachment;
+  const isRichContent = !isDecryptionError && !isEncryptedMedia && shouldRenderMedia;
+  const isPlainText = !isDecryptionError && !isEncryptedMedia && !isRichContent;
+  const isAdditionalText = isEncryptedMedia && event.content && fileMetadata?.url &&
+    event.content !== fileMetadata.url && !event.content.startsWith(fileMetadata.url);
+
   return (
     <div className={cn("flex mb-4", isFromCurrentUser ? "justify-end" : "justify-start")}>
       <div className={cn(
@@ -227,7 +235,8 @@ const MessageBubble = memo(({
             {senderName}
           </div>
         )}
-        {message.error ? (
+
+        {isDecryptionError && (
           <Tooltip delayDuration={200}>
             <TooltipTrigger asChild>
               <p className="text-sm italic opacity-70 cursor-help">🔒 Failed to decrypt</p>
@@ -236,28 +245,29 @@ const MessageBubble = memo(({
               <p className="text-xs">{message.error}</p>
             </TooltipContent>
           </Tooltip>
-        ) : shouldRenderMedia && fileMetadata && isFileAttachment ? (
+        )}
+
+        {isEncryptedMedia && (
           <div className="text-sm">
-            <EncryptedMediaDisplay
-              fileMetadata={fileMetadata}
-              className="my-2"
-            />
-            {/* Only show text content if it's not just the file URL */}
-            {event.content && event.content !== fileMetadata.url && !event.content.startsWith(fileMetadata.url) && (
+            <EncryptedMediaDisplay fileMetadata={fileMetadata!} className="my-2" />
+            {isAdditionalText && (
               <div className="mt-2 whitespace-pre-wrap break-words">
                 <NoteContent event={messageEvent} className="whitespace-pre-wrap break-words" />
               </div>
             )}
           </div>
-        ) : shouldRenderMedia ? (
+        )}
+
+        {isRichContent && (
           <div className="text-sm">
             <NoteContent event={messageEvent} className="whitespace-pre-wrap break-words" />
           </div>
-        ) : (
-          <p className="text-sm whitespace-pre-wrap break-words">
-            {event.content}
-          </p>
         )}
+
+        {isPlainText && (
+          <p className="text-sm whitespace-pre-wrap break-words">{event.content}</p>
+        )}
+
         <div className="flex items-center justify-between gap-2 mt-1">
           <div className="flex items-center gap-2">
             <TooltipProvider>
