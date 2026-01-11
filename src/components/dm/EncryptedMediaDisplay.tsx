@@ -3,6 +3,7 @@ import { Blurhash } from 'react-blurhash';
 import { Pure as DMLib } from '@/lib/dmLib';
 import type { FileMetadata } from '@/lib/dmTypes';
 import { formatBytes, formatSpeed } from '@/lib/dmUtils';
+import { getCachedDecryptedBlob, cacheDecryptedBlob } from '@/lib/dmMediaCache';
 import { Loader2, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -58,10 +59,21 @@ export function EncryptedMediaDisplay({ fileMetadata, className }: EncryptedMedi
 			setIsDecrypting(true);
 			setError(null);
 			setDownloadProgress(null);
-			downloadStartTime.current = Date.now();
 
 			try {
-				// Download encrypted file through our proxy to bypass CORS
+				// Check cache first
+				const cached = await getCachedDecryptedBlob(fileMetadata);
+				if (cached) {
+					const url = URL.createObjectURL(cached);
+					setDecryptedBlob(cached);
+					setDecryptedUrl(url);
+					setIsDecrypting(false);
+					isDownloading.current = false;
+					return;
+				}
+
+				// Not cached - download and decrypt
+				downloadStartTime.current = Date.now();
 				const proxyUrl = `/media-proxy/${fileMetadata.url!}`;
 				console.log('[EncryptedMedia] Downloading via proxy:', proxyUrl);
 
@@ -91,7 +103,6 @@ export function EncryptedMediaDisplay({ fileMetadata, className }: EncryptedMedi
 						// Calculate speed
 						const elapsed = (Date.now() - downloadStartTime.current!) / 1000;
 						const speed = elapsed > 0 ? loaded / elapsed : null;
-
 						setDownloadProgress({ loaded, total, speed });
 					}
 
@@ -120,6 +131,9 @@ export function EncryptedMediaDisplay({ fileMetadata, className }: EncryptedMedi
 					fileMetadata.decryptionNonce!,
 					fileMetadata.encryptionAlgorithm || 'aes-gcm'
 				);
+
+				// Cache decrypted blob
+				await cacheDecryptedBlob(fileMetadata, decrypted);
 
 				setDecryptedBlob(decrypted);
 				const url = URL.createObjectURL(decrypted);

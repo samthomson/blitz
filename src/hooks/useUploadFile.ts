@@ -1,5 +1,6 @@
 import { useMutation } from "@tanstack/react-query";
 import { BlossomUploader } from '@nostrify/nostrify/uploaders';
+import { Impure as DMLib } from '@/lib/dmLib';
 
 import { useCurrentUser } from "./useCurrentUser";
 
@@ -7,7 +8,11 @@ export function useUploadFile() {
   const { user } = useCurrentUser();
 
   return useMutation({
-    mutationFn: async (file: File) => {
+    mutationFn: async (params: File | { file: File; encrypt?: boolean }) => {
+      // Support both old API (just File) and new API (object with encrypt flag)
+      const file = params instanceof File ? params : params.file;
+      const encrypt = params instanceof File ? false : params.encrypt;
+      
       if (!user) {
         throw new Error('Must be logged in to upload files');
       }
@@ -19,6 +24,21 @@ export function useUploadFile() {
         signer: user.signer,
       });
 
+      // If encryption is requested, encrypt before upload
+      if (encrypt) {
+        const attachment = await DMLib.Message.prepareEncryptedAttachment(
+          file,
+          async (blob: Blob) => {
+            // Create a File-like object from blob for uploader
+            const blobFile = new File([blob], file.name, { type: 'application/octet-stream' });
+            return await uploader.upload(blobFile);
+          }
+        );
+        // Return tags in the same format as regular upload
+        return attachment.tags;
+      }
+
+      // Regular unencrypted upload
       const tags = await uploader.upload(file);
       return tags;
     },

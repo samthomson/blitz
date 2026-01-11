@@ -1679,10 +1679,15 @@ const decryptAllMessages = async (messages: NostrEvent[], signer: Signer, myPubk
 };
 const loadFromCache = async (myPubkey: string): Promise<MessagingState | null> => {
   try {
-    const db = await openDB(CACHE_DB_NAME, 1, {
-      upgrade(db) {
-        if (!db.objectStoreNames.contains(CACHE_STORE_NAME)) {
+    const db = await openDB(CACHE_DB_NAME, 2, {
+      upgrade(db, oldVersion) {
+        if (oldVersion < 1 || !db.objectStoreNames.contains(CACHE_STORE_NAME)) {
           db.createObjectStore(CACHE_STORE_NAME);
+        }
+        // Version 2: Add media-blobs store (created by dmMediaCache.ts)
+        if (oldVersion < 2 && !db.objectStoreNames.contains('media-blobs')) {
+          const store = db.createObjectStore('media-blobs', { keyPath: 'id' });
+          store.createIndex('timestamp', 'timestamp');
         }
       },
     });
@@ -1753,10 +1758,14 @@ const loadFromCache = async (myPubkey: string): Promise<MessagingState | null> =
 }
 const saveToCache = async (myPubkey: string, data: MessagingState): Promise<void> => {
   try {
-    const db = await openDB(CACHE_DB_NAME, 1, {
-      upgrade(db) {
-        if (!db.objectStoreNames.contains(CACHE_STORE_NAME)) {
+    const db = await openDB(CACHE_DB_NAME, 2, {
+      upgrade(db, oldVersion) {
+        if (oldVersion < 1 || !db.objectStoreNames.contains(CACHE_STORE_NAME)) {
           db.createObjectStore(CACHE_STORE_NAME);
+        }
+        if (oldVersion < 2 && !db.objectStoreNames.contains('media-blobs')) {
+          const store = db.createObjectStore('media-blobs', { keyPath: 'id' });
+          store.createIndex('timestamp', 'timestamp');
         }
       },
     });

@@ -9,6 +9,7 @@ import { MESSAGE_PROTOCOL, PROTOCOL_MODE, type MessageProtocol } from '@/lib/dmC
 import { getDisplayName } from '@/lib/genUserName';
 import { formatConversationTime, formatFullDateTime, getPubkeyColor, formatBytes } from '@/lib/dmUtils';
 import { Pure as DMLib } from '@/lib/dmLib';
+import { isCached } from '@/lib/dmMediaCache';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -66,6 +67,16 @@ const RawEventModal = ({
   // Get dimensions from fileMetadata or extract from URL
   const dimensions = fileMetadata?.dim || (fileMetadata?.url ? extractDimensions(fileMetadata.url) : null);
 
+  // Check cache status
+  const [isCachedBlob, setIsCachedBlob] = useState<boolean | null>(null);
+  useEffect(() => {
+    if (fileMetadata && open) {
+      isCached(fileMetadata).then(setIsCachedBlob).catch(() => setIsCachedBlob(false));
+    } else {
+      setIsCachedBlob(null);
+    }
+  }, [fileMetadata, open]);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl max-h-[80vh] flex flex-col" aria-describedby={undefined}>
@@ -114,6 +125,17 @@ const RawEventModal = ({
 
                     <div className="text-muted-foreground">Encrypted:</div>
                     <div>{fileMetadata?.encryptionAlgorithm ? `Yes (${fileMetadata.encryptionAlgorithm})` : 'No'}</div>
+
+                    <div className="text-muted-foreground">Cached:</div>
+                    <div>
+                      {isCachedBlob === null ? (
+                        <span className="text-muted-foreground/70">Checking...</span>
+                      ) : isCachedBlob ? (
+                        <span className="text-green-600 dark:text-green-400">Yes</span>
+                      ) : (
+                        <span className="text-muted-foreground/70">No</span>
+                      )}
+                    </div>
 
                     {fileMetadata?.hash && (
                       <>
