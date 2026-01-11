@@ -1091,6 +1091,12 @@ describe('MyComponent', () => {
 
 ## AI Assistant Guidelines
 
+### Code Change Principles
+- **Never remove code, comments, or whitespace unless explicitly asked** - Preserve all existing code structure, comments, and formatting
+- **Minimize git diffs** - Strive to make the smallest possible diff. Only change what's necessary to complete the task
+- **Preserve existing patterns** - Match the existing code style, comment style, and formatting conventions
+- **Review-friendly changes** - Make it easy for reviewers to understand what changed and why. Small, focused diffs are easier to review than large refactors
+
 ### User Interface Text
 - **Never use emojis or icons in user-facing text** - No emojis in toasts, alerts, buttons, or any UI text
 - Keep messages clear, concise, and professional
