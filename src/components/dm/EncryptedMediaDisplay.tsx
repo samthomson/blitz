@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Blurhash } from 'react-blurhash';
 import { Pure as DMLib } from '@/lib/dmLib';
 import type { FileMetadata } from '@/lib/dmTypes';
+import { formatBytes, formatSpeed } from '@/lib/dmUtils';
 import { Loader2, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -145,19 +146,6 @@ export function EncryptedMediaDisplay({ fileMetadata, className }: EncryptedMedi
 
 	// Determine what to display
 	const displayUrl = decryptedUrl || (!isEncrypted ? fileMetadata.url : null);
-
-	// Helper to format bytes
-	const formatBytes = (bytes: number) => {
-		if (bytes < 1024) return `${bytes} B`;
-		if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-		return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-	};
-
-	const formatSpeed = (bytesPerSec: number) => {
-		if (bytesPerSec < 1024) return `${bytesPerSec.toFixed(0)} B/s`;
-		if (bytesPerSec < 1024 * 1024) return `${(bytesPerSec / 1024).toFixed(1)} KB/s`;
-		return `${(bytesPerSec / (1024 * 1024)).toFixed(1)} MB/s`;
-	};
 
 	// Error state
 	if (error) {

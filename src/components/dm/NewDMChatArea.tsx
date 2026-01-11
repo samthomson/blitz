@@ -7,7 +7,7 @@ import { useAuthorsBatch } from '@/hooks/useAuthorsBatch';
 import { useAppContext } from '@/hooks/useAppContext';
 import { MESSAGE_PROTOCOL, PROTOCOL_MODE, type MessageProtocol } from '@/lib/dmConstants';
 import { getDisplayName } from '@/lib/genUserName';
-import { formatConversationTime, formatFullDateTime, getPubkeyColor } from '@/lib/dmUtils';
+import { formatConversationTime, formatFullDateTime, getPubkeyColor, formatBytes } from '@/lib/dmUtils';
 import { Pure as DMLib } from '@/lib/dmLib';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -48,12 +48,6 @@ const RawEventModal = ({
   // NIP-17 has a seal (kind 13) wrapping the inner message
   const isNIP17 = outerEvent.kind === 13 && !!innerEvent;
   const isFileMessage = innerEvent?.kind === 15 || outerEvent.kind === 15;
-
-  const formatBytes = (bytes: number) => {
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  };
 
   const extractDomain = (url: string) => {
     try { return new URL(url).hostname; } catch { return null; }

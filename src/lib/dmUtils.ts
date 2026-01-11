@@ -105,6 +105,24 @@ export function formatFullDateTime(timestamp: number): string {
  * @param pubkey - The user's public key
  * @returns Hex color string (e.g., '#dc2626')
  */
+/**
+ * Format bytes to human-readable string (e.g., "1.5 MB")
+ */
+export function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/**
+ * Format bytes per second to human-readable speed (e.g., "1.5 MB/s")
+ */
+export function formatSpeed(bytesPerSec: number): string {
+  if (bytesPerSec < 1024) return `${bytesPerSec.toFixed(0)} B/s`;
+  if (bytesPerSec < 1024 * 1024) return `${(bytesPerSec / 1024).toFixed(1)} KB/s`;
+  return `${(bytesPerSec / (1024 * 1024)).toFixed(1)} MB/s`;
+}
+
 export function getPubkeyColor(pubkey: string): string {
   const colors = [
     '#dc2626', // red
