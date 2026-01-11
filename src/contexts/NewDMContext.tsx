@@ -1009,6 +1009,10 @@ export const NewDMProvider = ({ children, config }: NewDMProviderProps) => {
       const { deleteMessagesFromDB } = await import('@/lib/dmMessageStore');
       await deleteMessagesFromDB(user.pubkey);
       
+      // Also clear media cache
+      const { clearMediaCache } = await import('@/lib/dmMediaCache');
+      await clearMediaCache();
+      
       // Reset state and trigger reload
       setContext({
         messagingState: null,
@@ -1021,7 +1025,7 @@ export const NewDMProvider = ({ children, config }: NewDMProviderProps) => {
       console.log('[NewDM] Cache cleared, reloading from relays...');
       toast({
         title: 'Cache cleared',
-        description: 'All messages have been reloaded from relays',
+        description: 'All messages and media have been reloaded from relays',
         duration: 5000,
         className: 'border-2 bg-card',
       });

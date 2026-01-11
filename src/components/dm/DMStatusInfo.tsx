@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { RefreshCw, Database, Wifi, CheckCircle2, Loader2 } from 'lucide-react';
 import { useNewDMContext } from '@/contexts/NewDMContext';
 import { NEW_DM_PHASES } from '@/lib/dmConstants';
@@ -7,6 +7,8 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/useToast';
+import { getMediaCacheStats } from '@/lib/dmMediaCache';
+import { formatBytes } from '@/lib/dmUtils';
 
 interface DMStatusInfoProps {
   clearCacheAndRefetch?: () => Promise<void>;
@@ -14,6 +16,7 @@ interface DMStatusInfoProps {
 
 export const DMStatusInfo = ({ clearCacheAndRefetch }: DMStatusInfoProps) => {
   const [isClearing, setIsClearing] = useState(false);
+  const [mediaCacheStats, setMediaCacheStats] = useState<{ count: number; size: number } | null>(null);
   const { toast } = useToast();
   const {
     phase,
@@ -30,12 +33,22 @@ export const DMStatusInfo = ({ clearCacheAndRefetch }: DMStatusInfoProps) => {
       : 0;
   }, [messagingState]);
 
+  // Fetch media cache stats
+  useEffect(() => {
+    getMediaCacheStats().then(setMediaCacheStats).catch(() => {
+      setMediaCacheStats({ count: 0, size: 0 });
+    });
+  }, [isClearing]); // Refresh after clearing cache
+
   const handleClearCache = async () => {
     if (!clearCacheAndRefetch) return;
     
     setIsClearing(true);
     try {
       await clearCacheAndRefetch();
+      // Refresh media cache stats after clearing
+      const stats = await getMediaCacheStats();
+      setMediaCacheStats(stats);
       toast({
         title: 'Cache cleared',
         description: 'Refetching messages from relays...',
@@ -176,6 +189,21 @@ export const DMStatusInfo = ({ clearCacheAndRefetch }: DMStatusInfoProps) => {
                 <span className="font-medium">{formatTimestamp(messagingState?.syncState.lastCacheTime)}</span>
               </div>
             </div>
+            {mediaCacheStats !== null && (
+              <>
+                <Separator />
+                <div className="space-y-2 text-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Media files cached</span>
+                    <span className="font-medium">{mediaCacheStats.count}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Media cache size</span>
+                    <span className="font-medium">{formatBytes(mediaCacheStats.size)}</span>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         </CardContent>
       </Card>

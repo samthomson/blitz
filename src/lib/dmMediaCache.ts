@@ -136,3 +136,39 @@ export async function cacheDecryptedBlob(
 	}
 }
 
+export async function clearMediaCache(): Promise<void> {
+	try {
+		const db = await getDB();
+		const tx = db.transaction(MEDIA_STORE_NAME, 'readwrite');
+		await tx.store.clear();
+		await tx.done;
+	} catch (error) {
+		console.warn('[MediaCache] Failed to clear media cache:', error);
+		throw error;
+	}
+}
+
+export async function getMediaCacheStats(): Promise<{ count: number; size: number }> {
+	try {
+		const db = await getDB();
+		const tx = db.transaction(MEDIA_STORE_NAME, 'readonly');
+		const store = tx.store;
+		
+		let count = 0;
+		let totalSize = 0;
+		let cursor = await store.openCursor();
+
+		while (cursor) {
+			count++;
+			totalSize += (cursor.value as CachedBlob).size;
+			cursor = await cursor.continue();
+		}
+
+		await tx.done;
+		return { count, size: totalSize };
+	} catch (error) {
+		console.warn('[MediaCache] Failed to get cache stats:', error);
+		return { count: 0, size: 0 };
+	}
+}
+
