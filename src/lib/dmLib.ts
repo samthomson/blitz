@@ -526,7 +526,7 @@ const enrichMessagesWithConversationId = (messagesWithMetadata: MessageWithMetad
       id: messageId,
       event: msg.event, // The inner message with DECRYPTED content
       conversationId: computeConversationId(msg.participants || []),
-      protocol: msg.event.kind === 4 ? 'nip04' : 'nip17',
+      protocol: (msg.event.kind === 4 ? 'nip04' : 'nip17') as 'nip04' | 'nip17',
       error: msg.error, // Pass through decryption error flag
       subject: msg.subject, // Store subject for updating conversation metadata
       // NIP-17 debugging - copy over encrypted layers
@@ -541,9 +541,8 @@ const enrichMessagesWithConversationId = (messagesWithMetadata: MessageWithMetad
     if (msg.event.kind === 15 && msg.fileMetadata) {
       console.log('[DM] enrichMessagesWithConversationId - fileMetadata:', {
         messageId: msg.id,
-        isArray: Array.isArray(msg.fileMetadata),
-        arrayLength: Array.isArray(msg.fileMetadata) ? msg.fileMetadata.length : 1,
-        files: Array.isArray(msg.fileMetadata) ? msg.fileMetadata.map(fm => ({ url: fm.url, mimeType: fm.mimeType })) : [{ url: msg.fileMetadata.url, mimeType: msg.fileMetadata.mimeType }]
+        arrayLength: msg.fileMetadata.length,
+        files: msg.fileMetadata.map(fm => ({ url: fm.url, mimeType: fm.mimeType }))
       });
     }
     return msg;
@@ -1565,8 +1564,8 @@ const processNIP17Message = async (msg: NostrEvent, signer: Signer): Promise<Mes
     if (imetaTags.length > 0) {
       // Parse from imeta tags (NIP-92 standard) - returns array of FileMetadata
       fileMetadata = parseImetaTags(imetaTags);
-      console.log('[DM] Parsed imeta tags:', { 
-        imetaTagCount: imetaTags.length, 
+      console.log('[DM] Parsed imeta tags:', {
+        imetaTagCount: imetaTags.length,
         fileMetadataCount: fileMetadata.length,
         fileMetadata: fileMetadata.map(fm => ({ url: fm.url, mimeType: fm.mimeType }))
       });
@@ -1739,13 +1738,13 @@ const loadFromCache = async (myPubkey: string): Promise<MessagingState | null> =
         if (message.event.kind === 15) {
           const event = message.event;
           const imetaTags = event.tags.filter((t: string[]) => t[0] === 'imeta');
-          
+
           // Always re-parse from imeta tags if they exist (supports multiple files)
           // This ensures we get all files even if cache had old single-file format
           if (imetaTags.length > 0) {
             const parsedMetadata = parseImetaTags(imetaTags);
             const currentCount = Array.isArray(message.fileMetadata) ? message.fileMetadata.length : (message.fileMetadata ? 1 : 0);
-            
+
             // Always update if counts differ (cache might have old format)
             if (parsedMetadata.length !== currentCount || parsedMetadata.length !== imetaTags.length) {
               message.fileMetadata = parsedMetadata;
@@ -1759,7 +1758,7 @@ const loadFromCache = async (myPubkey: string): Promise<MessagingState | null> =
               needsSave = true;
               console.log('[DM Cache] Migrated single fileMetadata to array format:', message.id);
             }
-            
+
             // Parse fileMetadata from event tags if missing (legacy format)
             if (!message.fileMetadata) {
               // Fallback to legacy single-file parsing
