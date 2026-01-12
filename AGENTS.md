@@ -1111,20 +1111,19 @@ describe('MyComponent', () => {
 ### Build and Validation Strategy
 - **Do NOT run builds after every change** - This is pointless and wastes time
 - Only run a build if there's an error that makes it seem necessary
-- Use linting tools (`read_lints`) to catch errors without full builds
+- **NEVER run linting tools (`read_lints`) without explicit user permission** - The user will handle linting themselves
 - Type checking happens automatically through linting
 
 ### Validation Priority
 
 When you make changes:
 
-1. **Linting** (When appropriate): Use `read_lints` on files you've edited to catch issues
+1. **Linting** (NEVER without permission): Do not run `read_lints` unless explicitly asked
 2. **Builds** (Only when necessary): Only run builds if there are errors suggesting compilation issues
 3. **Tests** (Only when appropriate): Don't run tests after every change unless you have good reason to
 
 **Minimum Requirements:**
 - Code should be syntactically correct
-- Fix any critical linting errors that would break functionality
-- Let the user handle builds, tests, and commits
+- Let the user handle linting, builds, tests, and commits
 
 The goal is to make changes efficiently without unnecessary validation steps.
