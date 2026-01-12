@@ -295,11 +295,8 @@ const MessageBubble = memo(({
   const isRichContent = !isDecryptionError && !isEncryptedMedia && shouldRenderMedia;
   const isPlainText = !isDecryptionError && !isEncryptedMedia && !isRichContent;
 
-  // Check if there's additional text beyond file URLs
-  const allFileUrls = fileMetadataArray.map(fm => fm.url).filter((url): url is string => !!url);
-  const isAdditionalText = isEncryptedMedia && event.content &&
-    allFileUrls.length > 0 &&
-    !allFileUrls.some(url => event.content === url || event.content.startsWith(url));
+  // For kind 15, content is just the user's caption (URLs are in imeta tags)
+  const isAdditionalText = isEncryptedMedia && event.content.trim().length > 0;
 
   return (
     <div className={cn("flex mb-4", isFromCurrentUser ? "justify-end" : "justify-start")}>
@@ -333,7 +330,7 @@ const MessageBubble = memo(({
             ))}
             {isAdditionalText && (
               <div className="mt-2 whitespace-pre-wrap break-words">
-                <NoteContent event={messageEvent} className="whitespace-pre-wrap break-words" />
+                {event.content}
               </div>
             )}
           </div>

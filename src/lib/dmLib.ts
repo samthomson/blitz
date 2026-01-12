@@ -2079,12 +2079,12 @@ const prepareEncryptedAttachment = async (
 };
 
 /**
- * Prepare message content with file URLs appended
+ * Prepare message content for kind 15 file messages.
+ * For kind 15, URLs are in imeta tags so content is just the user's text/caption.
+ * We don't append URLs to content - that would be redundant.
  */
-const prepareMessageContent = (content: string, attachments: FileAttachment[] = []): string => {
-  if (attachments.length === 0) return content;
-  const fileUrls = attachments.map(file => file.url).join('\n');
-  return content ? `${content}\n\n${fileUrls}` : fileUrls;
+const prepareMessageContent = (content: string, _attachments: FileAttachment[] = []): string => {
+  return content;
 };
 
 /**
