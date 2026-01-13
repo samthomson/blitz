@@ -143,6 +143,34 @@ export function isMediaFile(file: File): boolean {
   return !!extension;
 }
 
+/**
+ * Check if a URL points to an image
+ */
+export function isImageUrl(url: string): boolean {
+  return /\.(jpg|jpeg|png|gif|webp|bmp|svg)(\?|$)/i.test(url);
+}
+
+/**
+ * Check if a URL points to a video
+ */
+export function isVideoUrl(url: string): boolean {
+  return /\.(mp4|webm|mov|avi|mkv|m4v)(\?|$)/i.test(url);
+}
+
+/**
+ * Check if a URL points to an audio file
+ */
+export function isAudioUrl(url: string): boolean {
+  return /\.(mp3|wav|ogg|m4a|flac|aac)(\?|$)/i.test(url);
+}
+
+/**
+ * Check if a URL points to a document
+ */
+export function isDocUrl(url: string): boolean {
+  return /\.(pdf|doc|docx|xls|xlsx|ppt|pptx|txt|zip|rar|7z)(\?|$)/i.test(url);
+}
+
 export function getPubkeyColor(pubkey: string): string {
   const colors = [
     '#dc2626', // red

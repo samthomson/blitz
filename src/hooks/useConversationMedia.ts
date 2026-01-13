@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import type { Message } from '@/lib/dmTypes';
+import { isImageUrl, isVideoUrl, isAudioUrl, isDocUrl } from '@/lib/dmUtils';
 
 export interface MediaItem {
   messageId: string;
@@ -24,22 +25,6 @@ export interface DocItem {
 }
 
 const URL_REGEX = /(https?:\/\/[^\s]+)/g;
-
-const isImageUrl = (url: string): boolean => {
-  return /\.(jpg|jpeg|png|gif|webp|bmp|svg)(\?|$)/i.test(url);
-};
-
-const isVideoUrl = (url: string): boolean => {
-  return /\.(mp4|webm|mov|avi|mkv|m4v)(\?|$)/i.test(url);
-};
-
-const isAudioUrl = (url: string): boolean => {
-  return /\.(mp3|wav|ogg|m4a|flac|aac)(\?|$)/i.test(url);
-};
-
-const isDocUrl = (url: string): boolean => {
-  return /\.(pdf|doc|docx|xls|xlsx|ppt|pptx|txt|zip|rar|7z)(\?|$)/i.test(url);
-};
 
 export function useConversationMedia(messages: Message[]) {
   const { media, links, docs } = useMemo(() => {
