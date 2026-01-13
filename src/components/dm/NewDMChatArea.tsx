@@ -986,7 +986,7 @@ const ChatHeader = ({
   }, [subject, pendingSubject, setPendingSubject]);
 
   return (
-    <div className="px-4 py-4 border-b flex items-center gap-3">
+    <div className="px-4 py-4 border-b flex items-center gap-3 h-[73px]">
       {onBack && (
         <Button
           variant="ghost"
