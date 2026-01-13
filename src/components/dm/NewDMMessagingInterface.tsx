@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { NewDMConversationList } from '@/components/dm/NewDMConversationList';
 import { NewDMChatArea } from '@/components/dm/NewDMChatArea';
+import { ConversationMediaPanel } from '@/components/dm/ConversationMediaPanel';
 import { useIsMobile } from '@/hooks/useIsMobile';
 import { cn } from '@/lib/utils';
 
@@ -12,6 +13,7 @@ interface DMMessagingInterfaceProps {
 export const NewDMMessagingInterface = ({ className, onStatusClick }: DMMessagingInterfaceProps) => {
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const [scrollToMessageId, setScrollToMessageId] = useState<string | undefined>(undefined);
+  const [showMediaPanel, setShowMediaPanel] = useState(false);
   const isMobile = useIsMobile();
 
   // On mobile, show only one panel at a time
@@ -21,11 +23,25 @@ export const NewDMMessagingInterface = ({ className, onStatusClick }: DMMessagin
   const handleSelectConversation = useCallback((conversationId: string, messageId?: string) => {
     setSelectedConversationId(conversationId);
     setScrollToMessageId(messageId);
+    setShowMediaPanel(false); // Close media panel when switching conversations
   }, []);
 
   const handleBack = useCallback(() => {
     setSelectedConversationId(null);
+    setShowMediaPanel(false);
   }, []);
+
+  const handleToggleMediaPanel = useCallback(() => {
+    setShowMediaPanel(prev => !prev);
+  }, []);
+
+  const handleSelectMessageFromMedia = useCallback((messageId: string) => {
+    setScrollToMessageId(messageId);
+    // Only close panel on mobile
+    if (isMobile) {
+      setShowMediaPanel(false);
+    }
+  }, [isMobile]);
 
   return (
     <div className={cn("flex overflow-hidden h-full", className)}>
@@ -43,7 +59,7 @@ export const NewDMMessagingInterface = ({ className, onStatusClick }: DMMessagin
         />
       </div>
 
-      {/* Chat Area - Right Panel */}
+      {/* Chat Area - Center Panel */}
       <div className={cn(
         "flex-1 md:min-w-0",
         isMobile && !showChatArea && "hidden",
@@ -53,9 +69,32 @@ export const NewDMMessagingInterface = ({ className, onStatusClick }: DMMessagin
           conversationId={selectedConversationId}
           scrollToMessageId={scrollToMessageId}
           onBack={isMobile ? handleBack : undefined}
+          onToggleMediaPanel={handleToggleMediaPanel}
+          showMediaPanel={showMediaPanel}
           className="h-full"
         />
       </div>
+
+      {/* Media Panel - Desktop: Right Sidebar, Mobile: Dialog Modal */}
+      {showMediaPanel && selectedConversationId && (
+        <>
+          {isMobile ? (
+            <ConversationMediaPanel
+              conversationId={selectedConversationId}
+              onSelectMessage={handleSelectMessageFromMedia}
+              open={showMediaPanel}
+              onOpenChange={setShowMediaPanel}
+            />
+          ) : (
+            <div className="w-[320px] flex-shrink-0">
+              <ConversationMediaPanel
+                conversationId={selectedConversationId}
+                onSelectMessage={handleSelectMessageFromMedia}
+              />
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 };

@@ -20,7 +20,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
-import { ArrowLeft, Send, Loader2, AlertTriangle, AlertCircle, FileJson, FileLock, Server, ExternalLink, Copy, Check, Pencil, Paperclip, X } from 'lucide-react';
+import { ArrowLeft, Send, Loader2, AlertTriangle, AlertCircle, FileJson, FileLock, Server, ExternalLink, Copy, Check, Pencil, Paperclip, X, Info } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { NoteContent } from '@/components/NoteContent';
 import { EncryptedMediaDisplay } from '@/components/dm/EncryptedMediaDisplay';
@@ -31,6 +31,8 @@ interface DMChatAreaProps {
   conversationId: string | null;
   scrollToMessageId?: string;
   onBack?: () => void;
+  onToggleMediaPanel?: () => void;
+  showMediaPanel?: boolean;
   className?: string;
 }
 
@@ -913,12 +915,16 @@ const ChatHeader = ({
   conversationId,
   onBack,
   pendingSubject,
-  setPendingSubject
+  setPendingSubject,
+  onToggleMediaPanel,
+  showMediaPanel
 }: {
   conversationId: string;
   onBack?: () => void;
   pendingSubject: string | null;
   setPendingSubject: (subject: string | null) => void;
+  onToggleMediaPanel?: () => void;
+  showMediaPanel?: boolean;
 }) => {
   const { user } = useCurrentUser();
   const { getConversationRelays, messagingState } = useNewDMContext();
@@ -1018,25 +1024,47 @@ const ChatHeader = ({
         />
       </div>
 
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setShowRelayModal(true)}
-              className={cn(hasFailedRelays && "text-red-500 hover:text-red-500")}
-            >
-              <Server className="h-5 w-5" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>
-            <p className="text-xs">
-              {hasFailedRelays ? 'Some relays failed - click for details' : 'View relay information'}
-            </p>
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
+      <div className="flex items-center gap-1">
+        {onToggleMediaPanel && (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={onToggleMediaPanel}
+                  className={cn(showMediaPanel && "bg-accent")}
+                >
+                  <Info className="h-5 w-5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p className="text-xs">Media & Files</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
+
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setShowRelayModal(true)}
+                className={cn(hasFailedRelays && "text-red-500 hover:text-red-500")}
+              >
+                <Server className="h-5 w-5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p className="text-xs">
+                {hasFailedRelays ? 'Some relays failed - click for details' : 'View relay information'}
+              </p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      </div>
 
       <ParticipantInfoModal
         open={showParticipantModal}
@@ -1078,7 +1106,7 @@ const EmptyState = ({ isLoading }: { isLoading: boolean }) => {
   );
 };
 
-export const NewDMChatArea = ({ conversationId, scrollToMessageId, onBack, className }: DMChatAreaProps) => {
+export const NewDMChatArea = ({ conversationId, scrollToMessageId, onBack, onToggleMediaPanel, showMediaPanel, className }: DMChatAreaProps) => {
   const { user } = useCurrentUser();
   const { config } = useAppContext();
   const { sendMessage, protocolMode, isLoading } = useNewDMContext();
@@ -1397,6 +1425,8 @@ export const NewDMChatArea = ({ conversationId, scrollToMessageId, onBack, class
         onBack={onBack}
         pendingSubject={pendingSubject}
         setPendingSubject={setPendingSubject}
+        onToggleMediaPanel={onToggleMediaPanel}
+        showMediaPanel={showMediaPanel}
       />
 
       <ScrollArea ref={scrollAreaRef} className="flex-1 p-4">

@@ -274,10 +274,10 @@ export const NewDMConversationList = ({
   return (
     <div className={cn("h-full flex flex-col overflow-hidden border-r border-border bg-card", className)}>
       {/* Header - always visible */}
-      <div className="px-4 py-4 border-b flex-shrink-0">
-        <div className="flex items-center justify-between">
+      <div className="px-4 py-4 border-b flex-shrink-0 h-[73px]">
+        <div className="flex items-center justify-between h-full">
           <div className="flex items-center gap-2 min-w-0">
-            <div className="flex flex-col justify-center min-h-[32px]">
+            <div className="flex flex-col justify-center">
               <h1 className="text-lg font-bold bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent leading-none">
                 {APP_NAME}
               </h1>
