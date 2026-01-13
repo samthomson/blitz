@@ -198,7 +198,7 @@ export const ConversationMediaPanel = ({ conversationId, onSelectMessage, open, 
   // Desktop: Side panel
   return (
     <div className="h-full flex flex-col border-l bg-background">
-      <div className="px-4 py-4 border-b h-[73px] flex items-center">
+      <div className="px-4 py-4 border-b h-[80px] flex items-center">
         <h3 className="font-semibold">Media & Files</h3>
       </div>
       {panelContent}

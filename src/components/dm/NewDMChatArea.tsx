@@ -854,7 +854,7 @@ const SubjectEditor = ({
 
   if (isEditingSubject) {
     return (
-      <div className="flex items-center gap-1 px-3">
+      <div className="flex items-center gap-1 px-3 pb-1 h-[20px]">
         <input
           type="text"
           value={editedSubject}
@@ -864,13 +864,13 @@ const SubjectEditor = ({
             if (e.key === 'Escape') handleCancelEditSubject();
           }}
           placeholder="Enter subject..."
-          className="text-xs px-2 py-1 border rounded bg-background flex-1 min-w-0"
+          className="text-xs px-0 py-0 border-0 border-b rounded-none bg-transparent flex-1 min-w-0 focus-visible:outline-none focus-visible:ring-0 focus-visible:border-primary"
           autoFocus
         />
-        <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={handleSaveSubject}>
+        <Button size="sm" variant="ghost" className="h-5 w-5 p-0" onClick={handleSaveSubject}>
           <Check className="h-3 w-3" />
         </Button>
-        <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={handleCancelEditSubject}>
+        <Button size="sm" variant="ghost" className="h-5 w-5 p-0" onClick={handleCancelEditSubject}>
           ×
         </Button>
       </div>
@@ -880,7 +880,7 @@ const SubjectEditor = ({
   return (
     <>
       {(subject || pendingSubject !== null) && (
-        <div className="flex items-center gap-1 px-3 group">
+        <div className="flex items-center gap-1 px-3 pb-1 group h-[20px]">
           <p className={cn(
             "text-xs font-medium whitespace-nowrap",
             pendingSubject !== null ? "text-amber-500 italic" : "text-primary/80"
@@ -986,7 +986,7 @@ const ChatHeader = ({
   }, [subject, pendingSubject, setPendingSubject]);
 
   return (
-    <div className="px-4 py-4 border-b flex items-center gap-3 h-[73px]">
+    <div className="px-4 py-4 border-b flex items-center gap-3 h-[80px]">
       {onBack && (
         <Button
           variant="ghost"
