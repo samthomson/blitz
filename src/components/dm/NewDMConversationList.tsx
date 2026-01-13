@@ -1,22 +1,25 @@
 import { useMemo, useState, memo, useEffect, useRef } from 'react';
-import { Info, Loader2, AlertCircle, Radio } from 'lucide-react';
+import { Info, Loader2, AlertCircle, Radio, Search, X } from 'lucide-react';
 import { useNewDMContext } from '@/contexts/NewDMContext';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useAuthor } from '@/hooks/useAuthor';
+import { useDebounce } from '@/hooks/useDebounce';
 import { getDisplayName } from '@/lib/genUserName';
-import { formatConversationTime, formatFullDateTime, getPubkeyColor } from '@/lib/dmUtils';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { formatConversationTime, formatFullDateTime } from '@/lib/dmUtils';
+import { GroupAvatar } from '@/components/dm/GroupAvatar';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import { NewConversationDialog } from '@/components/NewConversationDialog';
+import { SearchResults } from '@/components/dm/SearchResults';
 import { APP_NAME, APP_DESCRIPTION } from '@/lib/constants';
 
 interface DMConversationListProps {
   selectedPubkey: string | null;
-  onSelectConversation: (conversationId: string) => void;
+  onSelectConversation: (conversationId: string, messageId?: string) => void;
   className?: string;
   onStatusClick?: () => void;
 }
@@ -31,91 +34,6 @@ interface ConversationItemProps {
   hasDecryptionErrors?: boolean;
   hasFailedRelays?: boolean;
 }
-
-const GroupAvatar = ({ pubkeys, isSelected }: { pubkeys: string[]; isSelected: boolean }) => {
-  const author1 = useAuthor(pubkeys[0] || '');
-  const author2 = useAuthor(pubkeys[1] || '');
-  const author3 = useAuthor(pubkeys[2] || '');
-  const author4 = useAuthor(pubkeys[3] || '');
-
-  const authors = [author1, author2, author3, author4];
-
-  if (pubkeys.length === 1) {
-    const metadata = author1.data?.metadata;
-    const displayName = getDisplayName(pubkeys[0], metadata);
-    const avatarUrl = metadata?.picture;
-    const initials = displayName.slice(0, 2).toUpperCase();
-    const bgColor = getPubkeyColor(pubkeys[0]);
-
-    return (
-      <Avatar className={cn("h-10 w-10 flex-shrink-0 transition-opacity", !isSelected && "opacity-40")}>
-        <AvatarImage src={avatarUrl} alt={displayName} />
-        <AvatarFallback className="text-white" style={{ backgroundColor: bgColor }}>{initials}</AvatarFallback>
-      </Avatar>
-    );
-  }
-
-  // For 2 people: split circle vertically
-  if (pubkeys.length === 2) {
-    return (
-      <div className={cn("relative h-10 w-10 rounded-full overflow-hidden flex-shrink-0 transition-opacity", !isSelected && "opacity-40")}>
-        {pubkeys.slice(0, 2).map((pubkey, index) => {
-          const author = authors[index];
-          const metadata = author?.data?.metadata;
-          const avatarUrl = metadata?.picture;
-          const bgColor = getPubkeyColor(pubkey);
-
-          return (
-            <div
-              key={pubkey}
-              className="absolute inset-0 w-1/2"
-              style={{ left: index === 0 ? 0 : '50%' }}
-            >
-              {avatarUrl ? (
-                <img src={avatarUrl} alt="" className="h-full w-full object-cover" />
-              ) : (
-                <div className="h-full w-full" style={{ backgroundColor: bgColor }} />
-              )}
-            </div>
-          );
-        })}
-      </div>
-    );
-  }
-
-  // For 3+ people: split into 4 quarters
-  return (
-    <div className={cn("relative h-10 w-10 rounded-full overflow-hidden flex-shrink-0 transition-opacity", !isSelected && "opacity-40")}>
-      {pubkeys.slice(0, 4).map((pubkey, index) => {
-        const author = authors[index];
-        const metadata = author?.data?.metadata;
-        const avatarUrl = metadata?.picture;
-        const bgColor = getPubkeyColor(pubkey);
-
-        const positions = [
-          { top: 0, left: 0 }, // top-left
-          { top: 0, left: '50%' }, // top-right
-          { top: '50%', left: 0 }, // bottom-left
-          { top: '50%', left: '50%' }, // bottom-right
-        ];
-
-        return (
-          <div
-            key={pubkey}
-            className="absolute w-1/2 h-1/2"
-            style={positions[index]}
-          >
-            {avatarUrl ? (
-              <img src={avatarUrl} alt="" className="h-full w-full object-cover" />
-            ) : (
-              <div className="h-full w-full" style={{ backgroundColor: bgColor }} />
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
-};
 
 const ConversationItemComponent = ({
   conversationId: _conversationId,
@@ -294,7 +212,11 @@ export const NewDMConversationList = ({
   const { messagingState, isLoading, phase, getConversationRelays } = useNewDMContext();
   const { user } = useCurrentUser();
   const [activeTab, setActiveTab] = useState<'known' | 'requests'>('known');
+  const [searchQuery, setSearchQuery] = useState('');
+  const debouncedSearchQuery = useDebounce(searchQuery, 300);
   const prevWasRequestRef = useRef<Set<string>>(new Set());
+  
+  const isSearching = debouncedSearchQuery.trim().length > 0;
 
   const conversations = useMemo(() => {
     if (!messagingState?.conversationMetadata) return [];
@@ -410,43 +332,70 @@ export const NewDMConversationList = ({
         </div>
       </div>
 
-      {/* Tab buttons - always visible */}
-      <div className="px-4 flex-shrink-0 border-b border-border">
-        <div className="flex gap-6">
-          <button
-            onClick={() => setActiveTab('known')}
-            className={cn(
-              "text-sm py-3 font-medium transition-colors relative",
-              activeTab === 'known'
-                ? "text-foreground"
-                : "text-muted-foreground hover:text-foreground"
-            )}
-          >
-            Active {knownConversations.length > 0 && `(${knownConversations.length})`}
-            {activeTab === 'known' && (
-              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
-            )}
-          </button>
-          <button
-            onClick={() => setActiveTab('requests')}
-            className={cn(
-              "text-sm py-3 font-medium transition-colors relative",
-              activeTab === 'requests'
-                ? "text-foreground"
-                : "text-muted-foreground hover:text-foreground"
-            )}
-          >
-            Requests {requestConversations.length > 0 && `(${requestConversations.length})`}
-            {activeTab === 'requests' && (
-              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
-            )}
-          </button>
+      {/* Search input */}
+      <div className="px-4 py-3 border-b flex-shrink-0">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+          <Input
+            type="text"
+            placeholder="Search conversations..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-9 pr-9"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+              aria-label="Clear search"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Content area - show skeleton during initial load, otherwise show conversations */}
+      {/* Tab buttons - hidden when searching */}
+      {!isSearching && (
+        <div className="px-4 flex-shrink-0 border-b border-border">
+          <div className="flex gap-6">
+            <button
+              onClick={() => setActiveTab('known')}
+              className={cn(
+                "text-sm py-3 font-medium transition-colors relative",
+                activeTab === 'known'
+                  ? "text-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              Active {knownConversations.length > 0 && `(${knownConversations.length})`}
+              {activeTab === 'known' && (
+                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
+              )}
+            </button>
+            <button
+              onClick={() => setActiveTab('requests')}
+              className={cn(
+                "text-sm py-3 font-medium transition-colors relative",
+                activeTab === 'requests'
+                  ? "text-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              Requests {requestConversations.length > 0 && `(${requestConversations.length})`}
+              {activeTab === 'requests' && (
+                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
+              )}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Content area - show search results when searching, otherwise show conversations */}
       <div className="flex-1 min-h-0 mt-2 overflow-hidden">
-        {isInitialLoad ? (
+        {isSearching ? (
+          <SearchResults query={debouncedSearchQuery} onSelectConversation={onSelectConversation} />
+        ) : isInitialLoad ? (
           <ConversationListSkeleton />
         ) : conversationsWithRelayStatus.length === 0 ? (
           <div className="flex items-center justify-center h-full text-center text-muted-foreground px-4">

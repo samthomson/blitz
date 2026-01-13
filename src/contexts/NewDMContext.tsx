@@ -7,8 +7,11 @@ import { useAppContext } from '@/hooks/useAppContext';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { useToast } from '@/hooks/useToast';
 import { useNetworkState } from '@/hooks/useNetworkState';
+import { useAuthor } from '@/hooks/useAuthor';
+import { getDisplayName } from '@/lib/genUserName';
 import type { NPool } from '@nostrify/nostrify';
 import { RELAY_MODE } from '@/lib/dmTypes';
+import Fuse from 'fuse.js';
 import type {
   DMSettings,
   MessagingState,
@@ -272,11 +275,42 @@ interface ScanProgressState {
   nip17: ScanProgress | null;
 }
 
+interface SearchableMessage {
+  message: Message;
+  conversationId: string;
+  senderPubkey: string;
+  content: string;
+  timestamp: number;
+}
+
+interface SearchableConversation {
+  conversationId: string;
+  participantPubkeys: string[];
+  participantNames: string[];
+  lastActivity: number;
+}
+
+export interface MessageSearchResult {
+  message: Message;
+  conversationId: string;
+  score?: number;
+  matches?: readonly Fuse.FuseResultMatch[];
+}
+
+export interface ConversationSearchResult {
+  conversationId: string;
+  participantPubkeys: string[];
+  score?: number;
+  matches?: readonly Fuse.FuseResultMatch[];
+}
+
 interface MessagingContext {
   messagingState: MessagingState | null;
   isLoading: boolean;
   timing: Record<string, number>;
   phase: NewDMPhase | null;
+  messageSearchIndex: Fuse<SearchableMessage> | null;
+  conversationSearchIndex: Fuse<SearchableConversation> | null;
 }
 
 interface NewDMContextValue extends MessagingContext {
@@ -294,6 +328,8 @@ interface NewDMContextValue extends MessagingContext {
   scanProgress: ScanProgressState; // TODO: Implement batch progress tracking
   isDoingInitialLoad: boolean; // Derived from isLoading + phase
   reloadAfterSettingsChange: () => Promise<void>; // Reload messages after settings change
+  searchMessages: (query: string, conversationId?: string) => MessageSearchResult[];
+  searchConversations: (query: string) => ConversationSearchResult[];
 }
 
 const NewDMContext = createContext<NewDMContextValue | undefined>(undefined);
@@ -320,7 +356,9 @@ export const NewDMProvider = ({ children, config }: NewDMProviderProps) => {
     messagingState: null,
     isLoading: true,
     timing: {},
-    phase: null
+    phase: null,
+    messageSearchIndex: null,
+    conversationSearchIndex: null,
   });
   
   const [subscriptionStatus, setSubscriptionStatus] = useState<SubscriptionStatus>({
@@ -339,9 +377,11 @@ export const NewDMProvider = ({ children, config }: NewDMProviderProps) => {
   const nip17SubscriptionRef = useRef<{ close: () => void } | null>(null);
   const debouncedWriteRef = useRef<NodeJS.Timeout | null>(null);
   const relayRefreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const searchIndexUpdateRef = useRef<NodeJS.Timeout | null>(null);
   
   const DEBOUNCED_WRITE_DELAY = 5000;
   const RELAY_REFRESH_CHECK_INTERVAL = 30000; // 30 seconds
+  const SEARCH_INDEX_UPDATE_DELAY = 2000; // 2s debounce for search index updates
   
   const { mutateAsync: createEvent } = useNostrPublish();
   
@@ -349,6 +389,88 @@ export const NewDMProvider = ({ children, config }: NewDMProviderProps) => {
   const updateContext = useCallback((updates: Partial<MessagingContext>) => {
     setContext(prev => ({ ...prev, ...updates }));
   }, []);
+  
+  // Build search indices from messaging state
+  const buildSearchIndices = useCallback((messagingState: MessagingState, myPubkey: string) => {
+    // Flatten all messages for message search
+    const allMessages: SearchableMessage[] = [];
+    for (const [conversationId, messages] of Object.entries(messagingState.conversationMessages)) {
+      for (const message of messages) {
+        allMessages.push({
+          message,
+          conversationId,
+          senderPubkey: message.senderPubkey || message.event.pubkey,
+          content: message.event.content,
+          timestamp: message.event.created_at,
+        });
+      }
+    }
+    
+    // Build searchable conversations with participant names
+    const searchableConversations: SearchableConversation[] = [];
+    for (const [conversationId, conversation] of Object.entries(messagingState.conversationMetadata)) {
+      // Get participant names (excluding current user for display)
+      const otherParticipants = conversation.participantPubkeys.filter(pk => pk !== myPubkey);
+      const participantPubkeys = otherParticipants.length > 0 ? otherParticipants : [myPubkey];
+      
+      searchableConversations.push({
+        conversationId,
+        participantPubkeys,
+        participantNames: [], // Will be populated by search function using useAuthor
+        lastActivity: conversation.lastActivity,
+      });
+    }
+    
+    console.log(`[NewDM] Building search indices: ${allMessages.length} messages, ${searchableConversations.length} conversations`);
+    
+    // Create Fuse instances
+    const messageSearchIndex = new Fuse(allMessages, {
+      keys: [
+        { name: 'content', weight: 2 },
+      ],
+      threshold: 0.3,
+      includeScore: true,
+      includeMatches: true,
+      minMatchCharLength: 2,
+      ignoreLocation: true, // Search anywhere in the string
+    });
+    
+    const conversationSearchIndex = new Fuse(searchableConversations, {
+      keys: [
+        { name: 'participantNames', weight: 1 },
+      ],
+      threshold: 0.3,
+      includeScore: true,
+      includeMatches: true,
+      minMatchCharLength: 2,
+      ignoreLocation: true,
+    });
+    
+    return { messageSearchIndex, conversationSearchIndex };
+  }, []);
+  
+  // Debounced search index update
+  const updateSearchIndices = useCallback(() => {
+    if (!user?.pubkey || !context.messagingState) return;
+    
+    const { messageSearchIndex, conversationSearchIndex } = buildSearchIndices(context.messagingState, user.pubkey);
+    
+    setContext(prev => ({
+      ...prev,
+      messageSearchIndex,
+      conversationSearchIndex,
+    }));
+  }, [user?.pubkey, context.messagingState, buildSearchIndices]);
+  
+  const triggerSearchIndexUpdate = useCallback(() => {
+    if (searchIndexUpdateRef.current) {
+      clearTimeout(searchIndexUpdateRef.current);
+    }
+    searchIndexUpdateRef.current = setTimeout(() => {
+      updateSearchIndices();
+      searchIndexUpdateRef.current = null;
+    }, SEARCH_INDEX_UPDATE_DELAY);
+  }, [updateSearchIndices]);
   
   // Process incoming message and add to state incrementally
   const processIncomingMessage = useCallback(async (event: DMLib.NostrEvent) => {
@@ -737,6 +859,16 @@ export const NewDMProvider = ({ children, config }: NewDMProviderProps) => {
     triggerDebouncedWrite();
   }, [user?.pubkey, context.messagingState, context.isLoading, context.phase, triggerDebouncedWrite]);
 
+  // Watch messaging state and update search indices (debounced)
+  useEffect(() => {
+    if (!user?.pubkey || !context.messagingState || context.isLoading) return;
+    
+    // Don't update during initial load phases
+    if (context.phase === NEW_DM_PHASES.CACHE || context.phase === NEW_DM_PHASES.INITIAL_QUERY) return;
+    
+    triggerSearchIndexUpdate();
+  }, [user?.pubkey, context.messagingState, context.isLoading, context.phase, triggerSearchIndexUpdate]);
+
   // Background task: Refresh stale participant relay lists
   useEffect(() => {
     if (!user?.pubkey || !context.messagingState || context.isLoading) return;
@@ -850,6 +982,50 @@ export const NewDMProvider = ({ children, config }: NewDMProviderProps) => {
     
     return fetchedRelays;
   }, [nostr, appConfig.relayMode, discoveryRelays]);
+
+  // Search messages
+  const searchMessages = useCallback((query: string, conversationId?: string): MessageSearchResult[] => {
+    if (!context.messageSearchIndex || !query.trim()) return [];
+    
+    const results = context.messageSearchIndex.search(query);
+    
+    // Filter by conversation if specified
+    const filteredResults = conversationId
+      ? results.filter(r => r.item.conversationId === conversationId)
+      : results;
+    
+    return filteredResults.map(r => ({
+      message: r.item.message,
+      conversationId: r.item.conversationId,
+      score: r.score,
+      matches: r.matches,
+    }));
+  }, [context.messageSearchIndex]);
+  
+  // Search conversations by participant names
+  const searchConversations = useCallback((query: string): ConversationSearchResult[] => {
+    if (!context.conversationSearchIndex || !query.trim() || !context.messagingState) return [];
+    
+    // We need to populate participant names dynamically since useAuthor is a hook
+    // Instead, we'll search through conversations and match against display names manually
+    const searchTerm = query.toLowerCase();
+    const results: ConversationSearchResult[] = [];
+    
+    for (const [conversationId, conversation] of Object.entries(context.messagingState.conversationMetadata)) {
+      const otherParticipants = conversation.participantPubkeys.filter(pk => pk !== user?.pubkey);
+      const participantPubkeys = otherParticipants.length > 0 ? otherParticipants : [user!.pubkey];
+      
+      // Check if any participant's display name matches (we'll need to fetch this in the component)
+      // For now, just return all conversations and let the component filter
+      // This is a limitation of not being able to use hooks here
+      results.push({
+        conversationId,
+        participantPubkeys,
+      });
+    }
+    
+    return results;
+  }, [context.conversationSearchIndex, context.messagingState, user?.pubkey]);
 
   // Prepare NIP-04 Message (internal)
   const prepareNIP4Message = useCallback(async (
@@ -1096,6 +1272,10 @@ export const NewDMProvider = ({ children, config }: NewDMProviderProps) => {
         clearInterval(relayRefreshIntervalRef.current);
         relayRefreshIntervalRef.current = null;
       }
+      if (searchIndexUpdateRef.current) {
+        clearTimeout(searchIndexUpdateRef.current);
+        searchIndexUpdateRef.current = null;
+      }
     };
   }, [user?.pubkey, cleanupSubscriptions]);
   
@@ -1150,6 +1330,8 @@ export const NewDMProvider = ({ children, config }: NewDMProviderProps) => {
     scanProgress, // TODO: Implement batch progress tracking
     isDoingInitialLoad,
     reloadAfterSettingsChange,
+    searchMessages,
+    searchConversations,
   };
   
   return (

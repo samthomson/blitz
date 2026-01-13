@@ -11,14 +11,16 @@ interface DMMessagingInterfaceProps {
 
 export const NewDMMessagingInterface = ({ className, onStatusClick }: DMMessagingInterfaceProps) => {
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
+  const [scrollToMessageId, setScrollToMessageId] = useState<string | undefined>(undefined);
   const isMobile = useIsMobile();
 
   // On mobile, show only one panel at a time
   const showConversationList = !isMobile || !selectedConversationId;
   const showChatArea = !isMobile || selectedConversationId;
 
-  const handleSelectConversation = useCallback((conversationId: string) => {
+  const handleSelectConversation = useCallback((conversationId: string, messageId?: string) => {
     setSelectedConversationId(conversationId);
+    setScrollToMessageId(messageId);
   }, []);
 
   const handleBack = useCallback(() => {
@@ -49,6 +51,7 @@ export const NewDMMessagingInterface = ({ className, onStatusClick }: DMMessagin
       )}>
         <NewDMChatArea
           conversationId={selectedConversationId}
+          scrollToMessageId={scrollToMessageId}
           onBack={isMobile ? handleBack : undefined}
           className="h-full"
         />
