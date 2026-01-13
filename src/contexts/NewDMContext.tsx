@@ -7,9 +7,9 @@ import { useAppContext } from '@/hooks/useAppContext';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { useToast } from '@/hooks/useToast';
 import { useNetworkState } from '@/hooks/useNetworkState';
-import { useAuthor } from '@/hooks/useAuthor';
+import { useAuthorsBatch } from '@/hooks/useAuthorsBatch';
 import { getDisplayName } from '@/lib/genUserName';
-import type { NPool } from '@nostrify/nostrify';
+import type { NPool, NostrMetadata } from '@nostrify/nostrify';
 import { RELAY_MODE } from '@/lib/dmTypes';
 import Fuse from 'fuse.js';
 import type {
@@ -391,7 +391,7 @@ export const NewDMProvider = ({ children, config }: NewDMProviderProps) => {
   }, []);
   
   // Build search indices from messaging state
-  const buildSearchIndices = useCallback((messagingState: MessagingState, myPubkey: string) => {
+  const buildSearchIndices = useCallback((messagingState: MessagingState, myPubkey: string, metadataMap: Map<string, { metadata?: NostrMetadata }>) => {
     // Flatten all messages for message search
     const allMessages: SearchableMessage[] = [];
     for (const [conversationId, messages] of Object.entries(messagingState.conversationMessages)) {
@@ -408,18 +408,30 @@ export const NewDMProvider = ({ children, config }: NewDMProviderProps) => {
     
     // Build searchable conversations with participant names
     const searchableConversations: SearchableConversation[] = [];
+    
     for (const [conversationId, conversation] of Object.entries(messagingState.conversationMetadata)) {
-      // Get participant names (excluding current user for display)
       const otherParticipants = conversation.participantPubkeys.filter(pk => pk !== myPubkey);
       const participantPubkeys = otherParticipants.length > 0 ? otherParticipants : [myPubkey];
+      
+      const participantNames = participantPubkeys.map(pubkey => {
+        const authorData = metadataMap.get(pubkey);
+        const metadata = authorData?.metadata;
+        return getDisplayName(pubkey, metadata);
+      });
       
       searchableConversations.push({
         conversationId,
         participantPubkeys,
-        participantNames: [], // Will be populated by search function using useAuthor
+        participantNames,
         lastActivity: conversation.lastActivity,
       });
     }
+    
+    console.log('[NewDM] Search index built:', {
+      conversations: searchableConversations.length,
+      messages: allMessages.length,
+      sampleNames: searchableConversations.slice(0, 3).map(c => c.participantNames)
+    });
     
     console.log(`[NewDM] Building search indices: ${allMessages.length} messages, ${searchableConversations.length} conversations`);
     
@@ -449,18 +461,31 @@ export const NewDMProvider = ({ children, config }: NewDMProviderProps) => {
     return { messageSearchIndex, conversationSearchIndex };
   }, []);
   
+  // Collect all participant pubkeys for metadata fetching
+  const allParticipantPubkeys = useMemo(() => {
+    if (!context.messagingState) return [];
+    const pubkeys = new Set<string>();
+    for (const conversation of Object.values(context.messagingState.conversationMetadata)) {
+      conversation.participantPubkeys.forEach(pk => pubkeys.add(pk));
+    }
+    return Array.from(pubkeys);
+  }, [context.messagingState]);
+  
+  // Fetch metadata for all participants using existing hook (with caching)
+  const { data: authorsData } = useAuthorsBatch(allParticipantPubkeys);
+  
   // Debounced search index update
   const updateSearchIndices = useCallback(() => {
     if (!user?.pubkey || !context.messagingState) return;
     
-    const { messageSearchIndex, conversationSearchIndex } = buildSearchIndices(context.messagingState, user.pubkey);
+    const { messageSearchIndex, conversationSearchIndex } = buildSearchIndices(context.messagingState, user.pubkey, authorsData);
     
     setContext(prev => ({
       ...prev,
       messageSearchIndex,
       conversationSearchIndex,
     }));
-  }, [user?.pubkey, context.messagingState, buildSearchIndices]);
+  }, [user?.pubkey, context.messagingState, buildSearchIndices, authorsData]);
   
   const triggerSearchIndexUpdate = useCallback(() => {
     if (searchIndexUpdateRef.current) {
@@ -869,6 +894,7 @@ export const NewDMProvider = ({ children, config }: NewDMProviderProps) => {
     triggerSearchIndexUpdate();
   }, [user?.pubkey, context.messagingState, context.isLoading, context.phase, triggerSearchIndexUpdate]);
 
+
   // Background task: Refresh stale participant relay lists
   useEffect(() => {
     if (!user?.pubkey || !context.messagingState || context.isLoading) return;
@@ -1002,30 +1028,19 @@ export const NewDMProvider = ({ children, config }: NewDMProviderProps) => {
     }));
   }, [context.messageSearchIndex]);
   
-  // Search conversations by participant names
+  // Search conversations by participant names using Fuse
   const searchConversations = useCallback((query: string): ConversationSearchResult[] => {
-    if (!context.conversationSearchIndex || !query.trim() || !context.messagingState) return [];
+    if (!context.conversationSearchIndex || !query.trim()) return [];
     
-    // We need to populate participant names dynamically since useAuthor is a hook
-    // Instead, we'll search through conversations and match against display names manually
-    const searchTerm = query.toLowerCase();
-    const results: ConversationSearchResult[] = [];
+    const results = context.conversationSearchIndex.search(query);
     
-    for (const [conversationId, conversation] of Object.entries(context.messagingState.conversationMetadata)) {
-      const otherParticipants = conversation.participantPubkeys.filter(pk => pk !== user?.pubkey);
-      const participantPubkeys = otherParticipants.length > 0 ? otherParticipants : [user!.pubkey];
-      
-      // Check if any participant's display name matches (we'll need to fetch this in the component)
-      // For now, just return all conversations and let the component filter
-      // This is a limitation of not being able to use hooks here
-      results.push({
-        conversationId,
-        participantPubkeys,
-      });
-    }
-    
-    return results;
-  }, [context.conversationSearchIndex, context.messagingState, user?.pubkey]);
+    return results.map(r => ({
+      conversationId: r.item.conversationId,
+      participantPubkeys: r.item.participantPubkeys,
+      score: r.score,
+      matches: r.matches,
+    }));
+  }, [context.conversationSearchIndex]);
 
   // Prepare NIP-04 Message (internal)
   const prepareNIP4Message = useCallback(async (
