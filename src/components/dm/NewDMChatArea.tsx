@@ -1147,85 +1147,52 @@ export const NewDMChatArea = ({ conversationId, scrollToMessageId, onBack, class
   useEffect(() => {
     if (!scrollToMessageId || !conversationId) return;
 
-    const scrollToMessage = async () => {
-      // Helper to highlight a message
-      const highlightMessage = (element: HTMLElement) => {
-        console.log('[NewDM] Highlighting message:', {
-          elementId: element.id,
-          elementHTML: element.innerHTML.substring(0, 100),
-          children: element.children.length
-        });
-        
-        // Target the actual message bubble (the rounded-lg div inside the flex container)
-        const messageBubble = element.querySelector('.rounded-lg.px-4.py-2') as HTMLElement;
-        
-        console.log('[NewDM] Found message bubble:', !!messageBubble);
-        
-        const targetElement = messageBubble || element;
-        
-        // FIRST: Scroll to the message
-        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        
-        // THEN: Wait for scroll to complete (smooth scroll takes ~500-800ms) before highlighting
-        setTimeout(() => {
-          console.log('[NewDM] Applying highlight after scroll');
-          
-          // Get the primary color from CSS variable
-          const primaryColor = getComputedStyle(document.documentElement)
-            .getPropertyValue('--primary')
-            .trim();
-          
-          // Prominent background highlight with app primary color
-          // CSS variable returns HSL values like "276 48% 52%", so we wrap in hsla()
-          targetElement.style.backgroundColor = `hsla(${primaryColor}, 0.35)`;
-          targetElement.style.transition = 'background-color 0.3s ease';
-          
-          // Remove highlight after 2.5 seconds
-          setTimeout(() => {
-            targetElement.style.backgroundColor = 'transparent';
-            setTimeout(() => {
-              targetElement.style.transition = '';
-            }, 300);
-          }, 2500);
-        }, 800); // Wait for scroll animation to complete
-      };
+    const highlightMessage = (element: HTMLElement) => {
+      const messageBubble = element.querySelector('.rounded-lg.px-4.py-2') as HTMLElement;
+      const targetElement = messageBubble || element;
       
-      // First, check if the message is already visible
-      console.log('[NewDM] Looking for message:', scrollToMessageId);
+      element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      
+      setTimeout(() => {
+        const primaryColor = getComputedStyle(document.documentElement)
+          .getPropertyValue('--primary')
+          .trim();
+        
+        targetElement.style.backgroundColor = `hsla(${primaryColor}, 0.35)`;
+        targetElement.style.transition = 'background-color 0.3s ease';
+        
+        setTimeout(() => {
+          targetElement.style.backgroundColor = 'transparent';
+          setTimeout(() => {
+            targetElement.style.transition = '';
+          }, 300);
+        }, 2500);
+      }, 800);
+    };
+
+    const scrollToMessage = async () => {
       const messageElement = document.getElementById(`message-${scrollToMessageId}`);
       
-      console.log('[NewDM] Message element found:', !!messageElement);
-      
       if (messageElement) {
-        // Message is already loaded, scroll to it
-        console.log('[NewDM] Message already visible, highlighting');
         highlightMessage(messageElement);
         return;
       }
-      
-      console.log('[NewDM] Message not visible, loading earlier messages...');
 
-      // Message not visible, need to load more messages
-      // Load all messages by repeatedly calling loadEarlierMessages
+      // Load earlier messages until we find the target
       let attempts = 0;
-      const maxAttempts = 20; // Prevent infinite loop
+      const maxAttempts = 20;
       
       while (hasMoreMessages && attempts < maxAttempts) {
         await loadEarlierMessages();
         attempts++;
         
-        // Check if message is now visible
-        await new Promise(resolve => setTimeout(resolve, 100)); // Wait for DOM update
+        await new Promise(resolve => setTimeout(resolve, 100));
         const element = document.getElementById(`message-${scrollToMessageId}`);
-        console.log('[NewDM] After loading batch', attempts, '- found:', !!element);
         if (element) {
-          console.log('[NewDM] Message found after loading, highlighting');
           highlightMessage(element);
           break;
         }
       }
-      
-      console.log('[NewDM] Finished loading attempts, message found:', !!document.getElementById(`message-${scrollToMessageId}`));
     };
 
     scrollToMessage();
