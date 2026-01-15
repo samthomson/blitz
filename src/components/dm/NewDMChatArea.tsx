@@ -733,7 +733,41 @@ const RelayInfoModal = ({ open, onOpenChange, conversationId }: { open: boolean;
   const { getConversationRelays, messagingState } = useNewDMContext();
 
   // This is reactive - updates when cache updates
-  const relayInfo = useMemo(() => getConversationRelays(conversationId), [getConversationRelays, conversationId]);
+  const rawRelayInfo = useMemo(() => getConversationRelays(conversationId), [getConversationRelays, conversationId]);
+
+  // Get discovery relays for comparison
+  const discoveryRelays = useMemo(() => new Set(config.discoveryRelays), [config.discoveryRelays]);
+
+  // Sort relays logically:
+  // 1. By number of users (most shared first)
+  // 2. Within same count, discovery relays before individual relays
+  // 3. Within same count and discovery status, current user's relays before others
+  // 4. Finally, alphabetically by relay URL
+  const relayInfo = useMemo(() => {
+    return [...rawRelayInfo].sort((a, b) => {
+      // Primary: Sort by number of users (descending - most shared first)
+      if (b.users.length !== a.users.length) {
+        return b.users.length - a.users.length;
+      }
+
+      // Secondary: Discovery relays come before non-discovery
+      const aIsDiscovery = discoveryRelays.has(a.relay);
+      const bIsDiscovery = discoveryRelays.has(b.relay);
+      if (aIsDiscovery !== bIsDiscovery) {
+        return aIsDiscovery ? -1 : 1;
+      }
+
+      // Tertiary: Current user's relays come before others
+      const aHasCurrentUser = a.users.some(u => u.isCurrentUser);
+      const bHasCurrentUser = b.users.some(u => u.isCurrentUser);
+      if (aHasCurrentUser !== bHasCurrentUser) {
+        return aHasCurrentUser ? -1 : 1;
+      }
+
+      // Final: Alphabetically by relay URL
+      return a.relay.localeCompare(b.relay);
+    });
+  }, [rawRelayInfo, discoveryRelays]);
 
   // Get all participant pubkeys and fetch their metadata
   const otherParticipants = useMemo(() => {
@@ -742,9 +776,6 @@ const RelayInfoModal = ({ open, onOpenChange, conversationId }: { open: boolean;
   }, [conversationId, user?.pubkey]);
 
   const authorsData = useAuthorsBatch(otherParticipants);
-
-  // Get discovery relays for comparison
-  const discoveryRelays = useMemo(() => new Set(config.discoveryRelays), [config.discoveryRelays]);
 
   // Count failed relays
   const failedCount = useMemo(() => {
