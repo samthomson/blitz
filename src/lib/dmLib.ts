@@ -340,8 +340,18 @@ const getConversationRelays = (
     // (In new architecture, derivedRelays are already computed from available lists)
     const source = isCurrentUser ? 'Your inbox relays' : 'Inbox relays';
 
+    // Track which relays we've already added this user to (to avoid duplicates from normalization)
+    const addedRelays = new Set<string>();
+
     relays.forEach(relay => {
       const normalizedRelay = normalizeRelayUrl(relay);
+      
+      // Skip if we've already added this user to this normalized relay
+      if (addedRelays.has(normalizedRelay)) {
+        return;
+      }
+      addedRelays.add(normalizedRelay);
+
       if (!relayMap.has(normalizedRelay)) {
         relayMap.set(normalizedRelay, []);
       }
