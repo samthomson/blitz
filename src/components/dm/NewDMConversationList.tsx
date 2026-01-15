@@ -8,7 +8,6 @@ import { getDisplayName } from '@/lib/genUserName';
 import { formatConversationTime, formatFullDateTime } from '@/lib/dmUtils';
 import { GroupAvatar } from '@/components/dm/GroupAvatar';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -22,6 +21,10 @@ interface DMConversationListProps {
   onSelectConversation: (conversationId: string, messageId?: string) => void;
   className?: string;
   onStatusClick?: () => void;
+  searchInputRef?: React.RefObject<HTMLInputElement>;
+  onSearchFocus?: () => void;
+  filterConversationId?: string | null;
+  onClearFilter?: () => void;
 }
 
 interface ConversationItemProps {
@@ -34,6 +37,15 @@ interface ConversationItemProps {
   hasDecryptionErrors?: boolean;
   hasFailedRelays?: boolean;
 }
+
+// Truncated version for chip display
+const ConversationNameTruncated = ({ pubkey, maxLength }: { pubkey: string; maxLength: number }) => {
+  const author = useAuthor(pubkey);
+  const metadata = author.data?.metadata;
+  const name = getDisplayName(pubkey, metadata);
+  const truncated = name.length > maxLength ? `${name.slice(0, maxLength)}...` : name;
+  return <>{truncated}</>;
+};
 
 const ConversationItemComponent = ({
   conversationId: _conversationId,
@@ -207,7 +219,11 @@ export const NewDMConversationList = ({
   selectedPubkey,
   onSelectConversation,
   className,
-  onStatusClick
+  onStatusClick,
+  searchInputRef,
+  onSearchFocus,
+  filterConversationId,
+  onClearFilter
 }: DMConversationListProps) => {
   const { messagingState, isLoading, phase, getConversationRelays } = useNewDMContext();
   const { user } = useCurrentUser();
@@ -215,8 +231,18 @@ export const NewDMConversationList = ({
   const [searchQuery, setSearchQuery] = useState('');
   const debouncedSearchQuery = useDebounce(searchQuery, 300);
   const prevWasRequestRef = useRef<Set<string>>(new Set());
+  const internalSearchInputRef = useRef<HTMLInputElement>(null);
   
-  const isSearching = debouncedSearchQuery.trim().length > 0;
+  // Use external ref if provided, otherwise use internal ref
+  const effectiveSearchInputRef = searchInputRef || internalSearchInputRef;
+  
+  const isSearching = debouncedSearchQuery.trim().length > 0 || !!filterConversationId;
+
+  // Get filter conversation name for chip display
+  const filterConversation = filterConversationId ? messagingState?.conversationMetadata[filterConversationId] : null;
+  const filterConversationParticipants = filterConversationId 
+    ? filterConversation?.participantPubkeys.filter(pk => pk !== user?.pubkey) || []
+    : [];
 
   const conversations = useMemo(() => {
     if (!messagingState?.conversationMetadata) return [];
@@ -334,29 +360,59 @@ export const NewDMConversationList = ({
 
       {/* Search input */}
       <div className="py-3 border-b flex-shrink-0">
-        <div className="relative px-4">
-          <Search className="absolute left-7 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-          <Input
-            type="text"
-            placeholder="Search conversations..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Escape') {
-                e.currentTarget.blur();
-              }
-            }}
-            className="pl-9 pr-9 border-0 rounded-sm bg-muted/50 placeholder:text-muted-foreground/40 focus-visible:placeholder:text-muted-foreground focus-visible:bg-muted"
-          />
-          {searchQuery && (
-            <button
-              onClick={() => setSearchQuery('')}
-              className="absolute right-7 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-              aria-label="Clear search"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          )}
+        <div className="px-4">
+          <div className="relative flex items-center gap-2 bg-muted/50 rounded-sm px-3 py-2 focus-within:bg-muted">
+            <Search className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+            
+            {/* Filter chip */}
+            {filterConversationId && filterConversationParticipants.length > 0 && (
+              <div className="flex items-center gap-1 bg-primary text-primary-foreground px-2 py-0.5 rounded-full text-xs flex-shrink-0">
+                <GroupAvatar pubkeys={filterConversationParticipants} size="xs" />
+                <span className="font-medium truncate" style={{ maxWidth: '60px' }}>
+                  {filterConversationParticipants.length === 1 ? (
+                    <ConversationNameTruncated pubkey={filterConversationParticipants[0]} maxLength={8} />
+                  ) : (
+                    `${filterConversationParticipants.length} people`
+                  )}
+                </span>
+                <button
+                  onClick={onClearFilter}
+                  className="hover:bg-primary-foreground/20 rounded-full p-0.5"
+                  aria-label="Clear filter"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            )}
+            
+            <input
+              ref={effectiveSearchInputRef}
+              type="text"
+              placeholder={filterConversationId ? "Search in conversation..." : "Search conversations..."}
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onFocus={onSearchFocus}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') {
+                  e.currentTarget.blur();
+                }
+              }}
+              className="flex-1 bg-transparent border-0 outline-none text-sm placeholder:text-muted-foreground/40 focus:placeholder:text-muted-foreground min-w-0"
+            />
+            
+            {(searchQuery || filterConversationId) && (
+              <button
+                onClick={() => {
+                  setSearchQuery('');
+                  onClearFilter?.();
+                }}
+                className="text-muted-foreground hover:text-foreground transition-colors flex-shrink-0"
+                aria-label="Clear search"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -399,7 +455,11 @@ export const NewDMConversationList = ({
       {/* Content area - show search results when searching, otherwise show conversations */}
       <div className="flex-1 min-h-0 mt-2 overflow-hidden">
         {isSearching ? (
-          <SearchResults query={debouncedSearchQuery} onSelectConversation={onSelectConversation} />
+          <SearchResults 
+            query={debouncedSearchQuery} 
+            onSelectConversation={onSelectConversation}
+            filterConversationId={filterConversationId}
+          />
         ) : isInitialLoad ? (
           <ConversationListSkeleton />
         ) : conversationsWithRelayStatus.length === 0 ? (

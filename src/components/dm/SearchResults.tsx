@@ -7,13 +7,23 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 interface SearchResultsProps {
   query: string;
   onSelectConversation: (conversationId: string, messageId?: string) => void;
+  filterConversationId?: string | null;
 }
 
-export const SearchResults = ({ query, onSelectConversation }: SearchResultsProps) => {
+export const SearchResults = ({ query, onSelectConversation, filterConversationId }: SearchResultsProps) => {
   const { searchMessages, searchConversations } = useNewDMContext();
 
-  const messageResults = useMemo(() => searchMessages(query), [query, searchMessages]);
-  const conversationResults = useMemo(() => searchConversations(query), [query, searchConversations]);
+  const messageResults = useMemo(() => {
+    const results = searchMessages(query, filterConversationId || undefined);
+    // Sort by newest first (highest timestamp first)
+    return results.sort((a, b) => b.message.event.created_at - a.message.event.created_at);
+  }, [query, filterConversationId, searchMessages]);
+  
+  const conversationResults = useMemo(() => {
+    // If filtering by conversation, don't show conversation results
+    if (filterConversationId) return [];
+    return searchConversations(query);
+  }, [query, filterConversationId, searchConversations]);
 
   const hasAnyResults = messageResults.length > 0 || conversationResults.length > 0;
 
