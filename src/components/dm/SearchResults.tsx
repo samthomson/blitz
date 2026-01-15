@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { useNewDMContext } from '@/contexts/NewDMContext';
 import { ConversationSearchResult } from './ConversationSearchResult';
 import { MessageSearchResult } from './MessageSearchResult';
@@ -8,9 +8,21 @@ interface SearchResultsProps {
   query: string;
   onSelectConversation: (conversationId: string, messageId?: string) => void;
   filterConversationId?: string | null;
+  selectedPubkey?: string | null;
 }
 
-export const SearchResults = ({ query, onSelectConversation, filterConversationId }: SearchResultsProps) => {
+export const SearchResults = ({ query, onSelectConversation, filterConversationId, selectedPubkey }: SearchResultsProps) => {
+  const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
+
+  // Clear highlight after 2 seconds
+  useEffect(() => {
+    if (highlightedMessageId) {
+      const timer = setTimeout(() => {
+        setHighlightedMessageId(null);
+      }, 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [highlightedMessageId]);
   const { searchMessages, searchConversations } = useNewDMContext();
 
   const messageResults = useMemo(() => {
@@ -52,6 +64,7 @@ export const SearchResults = ({ query, onSelectConversation, filterConversationI
                   key={result.conversationId}
                   result={result}
                   onClick={() => onSelectConversation(result.conversationId)}
+                  isSelected={selectedPubkey === result.conversationId}
                 />
               ))}
             </div>
@@ -69,7 +82,11 @@ export const SearchResults = ({ query, onSelectConversation, filterConversationI
                 <MessageSearchResult
                   key={result.message.id}
                   result={result}
-                  onClick={() => onSelectConversation(result.conversationId, result.message.id)}
+                  onClick={() => {
+                    setHighlightedMessageId(result.message.id);
+                    onSelectConversation(result.conversationId, result.message.id);
+                  }}
+                  isSelected={highlightedMessageId === result.message.id}
                 />
               ))}
             </div>

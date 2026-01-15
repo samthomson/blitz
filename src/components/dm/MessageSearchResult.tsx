@@ -11,9 +11,10 @@ import type { MessageSearchResult as MessageSearchResultType } from '@/contexts/
 interface MessageSearchResultProps {
   result: MessageSearchResultType;
   onClick: () => void;
+  isSelected?: boolean;
 }
 
-const MessageSearchResultComponent = ({ result, onClick }: MessageSearchResultProps) => {
+const MessageSearchResultComponent = ({ result, onClick, isSelected }: MessageSearchResultProps) => {
   const { user } = useCurrentUser();
   const { messagingState } = useNewDMContext();
   const { message, conversationId } = result;
@@ -60,7 +61,8 @@ const MessageSearchResultComponent = ({ result, onClick }: MessageSearchResultPr
     <button
       onClick={onClick}
       className={cn(
-        "w-full text-left p-3 rounded-lg transition-colors hover:bg-accent block overflow-hidden"
+        "w-full text-left p-3 rounded-lg transition-all duration-300 hover:bg-accent block overflow-hidden",
+        isSelected && "bg-accent"
       )}
     >
       <div className="flex items-start gap-3 max-w-full">

@@ -9,9 +9,10 @@ import type { ConversationSearchResult as ConversationSearchResultType } from '@
 interface ConversationSearchResultProps {
   result: ConversationSearchResultType;
   onClick: () => void;
+  isSelected?: boolean;
 }
 
-const ConversationSearchResultComponent = ({ result, onClick }: ConversationSearchResultProps) => {
+const ConversationSearchResultComponent = ({ result, onClick, isSelected }: ConversationSearchResultProps) => {
   const { user } = useCurrentUser();
   const { participantPubkeys } = result;
 
@@ -52,7 +53,8 @@ const ConversationSearchResultComponent = ({ result, onClick }: ConversationSear
     <button
       onClick={onClick}
       className={cn(
-        "w-full text-left p-3 rounded-lg transition-colors hover:bg-accent block overflow-hidden"
+        "w-full text-left p-3 rounded-lg transition-colors hover:bg-accent block overflow-hidden",
+        isSelected && "bg-accent"
       )}
     >
       <div className="flex items-start gap-3 max-w-full">

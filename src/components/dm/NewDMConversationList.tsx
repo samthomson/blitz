@@ -459,6 +459,7 @@ export const NewDMConversationList = ({
             query={debouncedSearchQuery} 
             onSelectConversation={onSelectConversation}
             filterConversationId={filterConversationId}
+            selectedPubkey={selectedPubkey}
           />
         ) : isInitialLoad ? (
           <ConversationListSkeleton />
