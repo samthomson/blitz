@@ -45,11 +45,11 @@ export const GroupAvatar = ({ pubkeys, isSelected, className, size = 'md' }: Gro
     );
   }
 
-  // For 2 people: split circle vertically
+  // For 2 people: split circle vertically with gap
   if (pubkeys.length === 2) {
     return (
       <div className={cn(
-        "relative rounded-full overflow-hidden flex-shrink-0 transition-opacity",
+        "relative rounded-full overflow-hidden flex-shrink-0 transition-opacity bg-background",
         sizeClasses[size],
         isSelected !== undefined && !isSelected && "opacity-40",
         className
@@ -63,8 +63,11 @@ export const GroupAvatar = ({ pubkeys, isSelected, className, size = 'md' }: Gro
           return (
             <div
               key={pubkey}
-              className="absolute inset-0 w-1/2"
-              style={{ left: index === 0 ? 0 : '50%' }}
+              className="absolute inset-0"
+              style={{ 
+                left: index === 0 ? 0 : 'calc(50% + 0.75px)',
+                width: 'calc(50% - 0.75px)'
+              }}
             >
               {avatarUrl ? (
                 <img src={avatarUrl} alt="" className="h-full w-full object-cover" />
@@ -78,10 +81,10 @@ export const GroupAvatar = ({ pubkeys, isSelected, className, size = 'md' }: Gro
     );
   }
 
-  // For 3+ people: split into 4 quarters
+  // For 3+ people: split into 4 quarters with gaps
   return (
     <div className={cn(
-      "relative rounded-full overflow-hidden flex-shrink-0 transition-opacity",
+      "relative rounded-full overflow-hidden flex-shrink-0 transition-opacity bg-background",
       sizeClasses[size],
       isSelected !== undefined && !isSelected && "opacity-40",
       className
@@ -94,16 +97,20 @@ export const GroupAvatar = ({ pubkeys, isSelected, className, size = 'md' }: Gro
 
         const positions = [
           { top: 0, left: 0 }, // top-left
-          { top: 0, left: '50%' }, // top-right
-          { top: '50%', left: 0 }, // bottom-left
-          { top: '50%', left: '50%' }, // bottom-right
+          { top: 0, left: 'calc(50% + 0.75px)' }, // top-right
+          { top: 'calc(50% + 0.75px)', left: 0 }, // bottom-left
+          { top: 'calc(50% + 0.75px)', left: 'calc(50% + 0.75px)' }, // bottom-right
         ];
 
         return (
           <div
             key={pubkey}
-            className="absolute w-1/2 h-1/2"
-            style={positions[index]}
+            className="absolute"
+            style={{
+              ...positions[index],
+              width: 'calc(50% - 0.75px)',
+              height: 'calc(50% - 0.75px)'
+            }}
           >
             {avatarUrl ? (
               <img src={avatarUrl} alt="" className="h-full w-full object-cover" />
