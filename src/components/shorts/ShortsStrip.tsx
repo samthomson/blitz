@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Plus, Play } from 'lucide-react';
+import { useState, useCallback } from 'react';
+import { Plus, Play, Loader2, AlertCircle } from 'lucide-react';
 import { useFollows } from '@/hooks/useFollows';
 import { useShortsFromAuthors, useShorts } from '@/hooks/useShorts';
 import { useAuthor } from '@/hooks/useAuthor';
@@ -11,6 +11,8 @@ import { ShortViewerModal } from './ShortViewerModal';
 import { MyShortsModal } from './MyShortsModal';
 import type { ShortVideo } from '@/hooks/useShorts';
 
+type VideoLoadState = 'loading' | 'loaded' | 'error';
+
 interface ShortThumbnailProps {
   short: ShortVideo;
   onClick: () => void;
@@ -19,6 +21,15 @@ interface ShortThumbnailProps {
 function ShortThumbnail({ short, onClick }: ShortThumbnailProps) {
   const author = useAuthor(short.pubkey);
   const metadata = author.data?.metadata;
+  const [loadState, setLoadState] = useState<VideoLoadState>('loading');
+
+  const handleLoadedData = useCallback(() => {
+    setLoadState('loaded');
+  }, []);
+
+  const handleError = useCallback(() => {
+    setLoadState('error');
+  }, []);
 
   return (
     <button
@@ -26,18 +37,40 @@ function ShortThumbnail({ short, onClick }: ShortThumbnailProps) {
       className="flex-shrink-0 flex flex-col items-center gap-1 group"
     >
       <div className="relative h-14 w-14 rounded-full overflow-hidden ring-2 ring-primary/50 group-hover:ring-primary transition-all bg-muted">
-        {/* Video thumbnail or first frame */}
+        {/* Video thumbnail */}
         <video
           src={short.videoUrl}
-          className="h-full w-full object-cover"
+          className={cn(
+            "h-full w-full object-cover transition-opacity",
+            loadState === 'loaded' ? 'opacity-100' : 'opacity-0'
+          )}
           muted
           playsInline
           preload="metadata"
+          onLoadedData={handleLoadedData}
+          onError={handleError}
         />
-        {/* Play indicator overlay */}
-        <div className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-black/40 transition-colors">
-          <Play className="h-4 w-4 text-white fill-white opacity-80" />
-        </div>
+        
+        {/* Loading state */}
+        {loadState === 'loading' && (
+          <div className="absolute inset-0 flex items-center justify-center bg-muted">
+            <Loader2 className="h-4 w-4 text-muted-foreground animate-spin" />
+          </div>
+        )}
+        
+        {/* Error state */}
+        {loadState === 'error' && (
+          <div className="absolute inset-0 flex items-center justify-center bg-muted">
+            <AlertCircle className="h-4 w-4 text-muted-foreground" />
+          </div>
+        )}
+        
+        {/* Play indicator overlay - only show when loaded */}
+        {loadState === 'loaded' && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-black/40 transition-colors">
+            <Play className="h-4 w-4 text-white fill-white opacity-80" />
+          </div>
+        )}
       </div>
       <span className="text-[10px] text-muted-foreground truncate max-w-[56px] group-hover:text-foreground transition-colors">
         {metadata?.name || 'User'}
@@ -63,6 +96,7 @@ export function ShortsStrip({ className }: ShortsStripProps) {
   const [showMyShortsModal, setShowMyShortsModal] = useState(false);
   const [selectedShort, setSelectedShort] = useState<ShortVideo | null>(null);
   const [viewerStartIndex, setViewerStartIndex] = useState(0);
+  const [myVideoLoadState, setMyVideoLoadState] = useState<VideoLoadState>('loading');
 
   // Dedupe by author - show only the latest short per person
   const dedupedShorts = followedShorts?.reduce((acc, short) => {
@@ -99,14 +133,34 @@ export function ShortsStrip({ className }: ShortsStripProps) {
                     <div className="relative h-14 w-14 rounded-full overflow-hidden ring-2 ring-primary group-hover:ring-primary/80 transition-all bg-muted">
                       <video
                         src={myShorts[0].videoUrl}
-                        className="h-full w-full object-cover"
+                        className={cn(
+                          "h-full w-full object-cover transition-opacity",
+                          myVideoLoadState === 'loaded' ? 'opacity-100' : 'opacity-0'
+                        )}
                         muted
                         playsInline
                         preload="metadata"
+                        onLoadedData={() => setMyVideoLoadState('loaded')}
+                        onError={() => setMyVideoLoadState('error')}
                       />
-                      <div className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-black/40 transition-colors">
-                        <Play className="h-4 w-4 text-white fill-white opacity-80" />
-                      </div>
+                      {/* Loading state */}
+                      {myVideoLoadState === 'loading' && (
+                        <div className="absolute inset-0 flex items-center justify-center bg-muted">
+                          <Loader2 className="h-4 w-4 text-muted-foreground animate-spin" />
+                        </div>
+                      )}
+                      {/* Error state */}
+                      {myVideoLoadState === 'error' && (
+                        <div className="absolute inset-0 flex items-center justify-center bg-muted">
+                          <AlertCircle className="h-4 w-4 text-muted-foreground" />
+                        </div>
+                      )}
+                      {/* Play overlay - only when loaded */}
+                      {myVideoLoadState === 'loaded' && (
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-black/40 transition-colors">
+                          <Play className="h-4 w-4 text-white fill-white opacity-80" />
+                        </div>
+                      )}
                     </div>
                     {/* Add badge */}
                     <button
