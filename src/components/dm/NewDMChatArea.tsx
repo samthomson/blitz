@@ -20,7 +20,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
-import { ArrowLeft, Send, Loader2, AlertTriangle, AlertCircle, FileJson, FileLock, Server, ExternalLink, Copy, Check, Pencil, Paperclip, X, Info, Search } from 'lucide-react';
+import { ArrowLeft, Send, Loader2, AlertTriangle, AlertCircle, FileJson, FileLock, Server, ExternalLink, Copy, Check, Pencil, Paperclip, X, Images, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { NoteContent } from '@/components/NoteContent';
 import { EncryptedMediaDisplay } from '@/components/dm/EncryptedMediaDisplay';
@@ -1098,7 +1098,7 @@ const ChatHeader = ({
                   onClick={onToggleMediaPanel}
                   className={cn(showMediaPanel && "bg-accent")}
                 >
-                  <Info className="h-5 w-5" />
+                  <Images className="h-5 w-5" />
                 </Button>
               </TooltipTrigger>
               <TooltipContent>

@@ -5,9 +5,10 @@ import { EncryptedMediaDisplay } from '@/components/dm/EncryptedMediaDisplay';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { ExternalLink, FileText, Image as ImageIcon } from 'lucide-react';
-import { formatConversationTime } from '@/lib/dmUtils';
+import { ExternalLink, FileText, Image as ImageIcon, Play } from 'lucide-react';
+import { formatConversationTime, isDisplayableMediaType } from '@/lib/dmUtils';
 import { cn } from '@/lib/utils';
+import type { FileMetadata } from '@/lib/dmTypes';
 
 interface ConversationMediaPanelProps {
   conversationId: string;
@@ -15,6 +16,26 @@ interface ConversationMediaPanelProps {
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
 }
+
+// Video thumbnail component for sidebar - no controls, just a play icon overlay
+const VideoThumbnail = ({ fileMetadata }: { fileMetadata: FileMetadata }) => {
+  return (
+    <div className="relative w-full h-full bg-black overflow-hidden">
+      <EncryptedMediaDisplay 
+        fileMetadata={fileMetadata} 
+        showVideoControls={false}
+        isSidebar={true}
+        className="w-full h-full [&_video]:w-full [&_video]:h-full [&_video]:object-cover [&_video]:pointer-events-none"
+      />
+      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+        <div className="w-8 h-8 rounded-full bg-white/90 backdrop-blur-sm flex items-center justify-center shadow-lg">
+          <Play className="h-4 w-4 text-black ml-0.5 fill-black" />
+        </div>
+      </div>
+    </div>
+  );
+};
+
 
 export const ConversationMediaPanel = ({ conversationId, onSelectMessage, open, onOpenChange }: ConversationMediaPanelProps) => {
   const { messages } = useConversationMessages(conversationId);
@@ -85,7 +106,7 @@ export const ConversationMediaPanel = ({ conversationId, onSelectMessage, open, 
                     <button
                       key={`${item.messageId}-${index}`}
                       onClick={() => onSelectMessage?.(item.messageId)}
-                      className="aspect-square bg-primary/10 rounded-lg overflow-hidden hover:opacity-80 transition-opacity relative"
+                      className="aspect-square bg-primary/10 rounded-sm overflow-hidden hover:opacity-80 transition-opacity relative"
                     >
                       <img 
                         src={item.url} 
@@ -105,17 +126,42 @@ export const ConversationMediaPanel = ({ conversationId, onSelectMessage, open, 
                 
                 if (!fileMetadata) return null;
                 
+                const isDisplayable = isDisplayableMediaType(fileMetadata.mimeType, fileMetadata.url);
+                const isVideo = fileMetadata.mimeType?.startsWith('video/');
+                
+                // For unsupported files (HEIC, unsupported videos, etc.), show as tile using EncryptedMediaDisplay
+                if (!isDisplayable) {
+                  return (
+                    <button
+                      key={`${item.messageId}-${index}`}
+                      onClick={() => onSelectMessage?.(item.messageId)}
+                      className="aspect-square rounded-sm overflow-hidden hover:opacity-80 transition-opacity relative"
+                    >
+                      <EncryptedMediaDisplay 
+                        fileMetadata={fileMetadata}
+                        isSidebar={true}
+                        className="w-full h-full"
+                      />
+                    </button>
+                  );
+                }
+                
                 return (
                   <button
                     key={`${item.messageId}-${index}`}
                     onClick={() => onSelectMessage?.(item.messageId)}
-                    className="aspect-square bg-primary/10 rounded-lg overflow-hidden hover:opacity-80 transition-opacity relative"
+                    className="aspect-square bg-primary/10 rounded-sm overflow-hidden hover:opacity-80 transition-opacity relative"
                   >
                     <div className="w-full h-full">
-                      <EncryptedMediaDisplay 
-                        fileMetadata={fileMetadata} 
-                        className="w-full h-full [&_img]:w-full [&_img]:h-full [&_img]:object-cover [&_video]:w-full [&_video]:h-full [&_video]:object-cover"
-                      />
+                      {isVideo ? (
+                        <VideoThumbnail fileMetadata={fileMetadata} />
+                      ) : (
+                        <EncryptedMediaDisplay 
+                          fileMetadata={fileMetadata}
+                          isSidebar={true}
+                          className="w-full h-full [&_img]:w-full [&_img]:h-full [&_img]:object-cover"
+                        />
+                      )}
                     </div>
                   </button>
                 );

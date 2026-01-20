@@ -2,15 +2,17 @@ import { useState, useEffect, useRef } from 'react';
 import { Blurhash } from 'react-blurhash';
 import { Pure as DMLib } from '@/lib/dmLib';
 import type { FileMetadata } from '@/lib/dmTypes';
-import { formatBytes, formatSpeed } from '@/lib/dmUtils';
+import { formatBytes, formatSpeed, isDisplayableMediaType } from '@/lib/dmUtils';
 import { getCachedDecryptedBlob, cacheDecryptedBlob } from '@/lib/dmMediaCache';
-import { Loader2, AlertCircle, RotateCcw } from 'lucide-react';
+import { Loader2, AlertCircle, RotateCcw, FileQuestion } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
 interface EncryptedMediaDisplayProps {
 	fileMetadata: FileMetadata;
 	className?: string;
+	showVideoControls?: boolean;
+	isSidebar?: boolean;
 }
 
 /**
@@ -18,7 +20,7 @@ interface EncryptedMediaDisplayProps {
  * - Downloads and decrypts encrypted files automatically
  * - Shows download progress with speed indicator
  */
-export function EncryptedMediaDisplay({ fileMetadata, className }: EncryptedMediaDisplayProps) {
+export function EncryptedMediaDisplay({ fileMetadata, className, showVideoControls = true, isSidebar = false }: EncryptedMediaDisplayProps) {
 	const [decryptedBlob, setDecryptedBlob] = useState<Blob | null>(null);
 	const [decryptedUrl, setDecryptedUrl] = useState<string | null>(null);
 	const [isDecrypting, setIsDecrypting] = useState(false);
@@ -43,6 +45,7 @@ export function EncryptedMediaDisplay({ fileMetadata, className }: EncryptedMedi
 
 	const isImage = fileMetadata.mimeType?.startsWith('image/');
 	const isVideo = fileMetadata.mimeType?.startsWith('video/');
+	const isDisplayable = isDisplayableMediaType(fileMetadata.mimeType, fileMetadata.url);
 
 	// Determine what to display (defined here to be available for useEffect below)
 	const displayUrl = decryptedUrl || (!isEncrypted ? fileMetadata.url : null);
@@ -292,55 +295,107 @@ export function EncryptedMediaDisplay({ fileMetadata, className }: EncryptedMedi
 		return null;
 	}
 
+	// Show generic placeholder for unsupported file types (HEIC, unsupported videos, etc.)
+	if ((isImage || isVideo) && !isDisplayable) {
+		if (isSidebar) {
+			// Sidebar variant - compact, no download link
+			return (
+				<div className={cn("w-full h-full flex flex-col items-center justify-center p-2 bg-amber-950/30 border border-amber-500/30 rounded-sm", className)}>
+					<FileQuestion className="h-6 w-6 text-amber-400 mb-1" />
+					<p className="text-xs text-amber-200 text-center line-clamp-2 break-words px-1">
+						{fileMetadata.name || 'Unsupported file'}
+					</p>
+				</div>
+			);
+		}
+		
+		// Main chat variant - full error message with download
+		return (
+			<div className={cn("p-4 border border-amber-500/50 rounded-md bg-amber-950/50", className)}>
+				<div className="flex flex-col gap-3">
+					<div className="flex items-start gap-2 text-amber-200">
+						<FileQuestion className="h-4 w-4 mt-0.5 flex-shrink-0 text-amber-400" />
+						<div className="flex-1">
+							<div className="text-sm font-medium text-amber-100">File format not supported</div>
+							<div className="text-sm mt-1 text-amber-200/90">
+								This file type cannot be displayed in your browser (e.g., HEIC files or unsupported video codecs).
+							</div>
+						</div>
+					</div>
+					{displayUrl && (
+						<a
+							href={displayUrl}
+							download={fileMetadata.name || 'file'}
+							className="text-sm text-amber-300 hover:text-amber-200 underline flex items-center gap-2"
+						>
+							📥 Download file
+						</a>
+					)}
+				</div>
+			</div>
+		);
+	}
+
 	// Render image
-	if (isImage) {
+	if (isImage && isDisplayable) {
 		return (
 			<div className={cn("relative", className)}>
 				<img
 					src={displayUrl}
 					alt={fileMetadata.name || 'Attached image'}
-					className="max-w-full rounded-md"
-					style={{ maxHeight: '400px' }}
+					className={cn("max-w-full", isSidebar ? "rounded-sm" : "rounded-md")}
+					style={{ maxHeight: isSidebar ? '100%' : '400px' }}
 				/>
 			</div>
 		);
 	}
 
 	// Render video
-	if (isVideo) {
+	if (isVideo && isDisplayable) {
 		return (
 			<div className={cn("relative", className)}>
 				{videoError ? (
-					<div className="p-4 border border-amber-500/50 rounded-md bg-amber-950/50">
-						<div className="flex flex-col gap-3">
-							<div className="flex items-start gap-2 text-amber-200">
-								<AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0 text-amber-400" />
-								<div className="flex-1">
-									<div className="text-sm font-medium text-amber-100">Video playback failed</div>
-									<div className="text-sm mt-1 text-amber-200/90">{videoError}</div>
-									<div className="text-xs mt-2 text-amber-200/70">
-										The video file may use a codec not supported by your browser (e.g., AVI files often use unsupported codecs).
+					// Video playback error - use same unified format as unsupported files
+					isSidebar ? (
+						<div className={cn("w-full h-full flex flex-col items-center justify-center p-2 bg-amber-950/30 border border-amber-500/30 rounded-sm", className)}>
+							<FileQuestion className="h-6 w-6 text-amber-400 mb-1" />
+							<p className="text-xs text-amber-200 text-center line-clamp-2 break-words px-1">
+								{fileMetadata.name || 'Unsupported file'}
+							</p>
+						</div>
+					) : (
+						<div className="p-4 border border-amber-500/50 rounded-md bg-amber-950/50">
+							<div className="flex flex-col gap-3">
+								<div className="flex items-start gap-2 text-amber-200">
+									<FileQuestion className="h-4 w-4 mt-0.5 flex-shrink-0 text-amber-400" />
+									<div className="flex-1">
+										<div className="text-sm font-medium text-amber-100">File format not supported</div>
+										<div className="text-sm mt-1 text-amber-200/90">
+											This file type cannot be displayed in your browser (e.g., HEIC files or unsupported video codecs).
+										</div>
 									</div>
 								</div>
+								{displayUrl && (
+									<a
+										href={displayUrl}
+										download={fileMetadata.name || 'file'}
+										className="text-sm text-amber-300 hover:text-amber-200 underline flex items-center gap-2"
+									>
+										📥 Download file
+									</a>
+								)}
 							</div>
-							{displayUrl && (
-								<a
-									href={displayUrl}
-									download={fileMetadata.name || 'video'}
-									className="text-sm text-amber-300 hover:text-amber-200 underline flex items-center gap-2"
-								>
-									📥 Download video file
-								</a>
-							)}
 						</div>
-					</div>
+					)
 				) : (
 					<video
 						src={displayUrl}
-						controls
+						controls={showVideoControls}
 						preload="metadata"
-						className="max-w-full rounded-md"
-						style={{ maxHeight: '400px' }}
+						className={cn("max-w-full", isSidebar ? "rounded-sm" : "rounded-md")}
+						style={{ maxHeight: isSidebar ? '100%' : '400px' }}
+						muted
+						playsInline
 						onError={(e) => {
 							const video = e.currentTarget;
 							const error = video.error;

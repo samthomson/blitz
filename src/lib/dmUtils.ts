@@ -171,6 +171,48 @@ export function isDocUrl(url: string): boolean {
   return /\.(pdf|doc|docx|xls|xlsx|ppt|pptx|txt|zip|rar|7z)(\?|$)/i.test(url);
 }
 
+/**
+ * Check if a file type can be displayed in the browser (images and videos)
+ * Excludes formats like HEIC that browsers don't support natively
+ */
+export function isDisplayableMediaType(mimeType?: string, url?: string): boolean {
+  if (!mimeType && !url) return false;
+  
+  // Check for unsupported image formats
+  const unsupportedImageTypes = [
+    'image/heic',
+    'image/heif',
+    'image/avif', // Some browsers don't support AVIF well
+  ];
+  
+  if (mimeType) {
+    // Check MIME type first
+    if (unsupportedImageTypes.includes(mimeType.toLowerCase())) {
+      return false;
+    }
+    
+    // Check if it's a displayable image or video type
+    if (mimeType.startsWith('image/') || mimeType.startsWith('video/')) {
+      // Exclude unsupported formats
+      return !unsupportedImageTypes.includes(mimeType.toLowerCase());
+    }
+  }
+  
+  // Fallback: check URL extension for unsupported formats
+  if (url) {
+    const urlLower = url.toLowerCase();
+    const unsupportedExtensions = ['.heic', '.heif'];
+    if (unsupportedExtensions.some(ext => urlLower.includes(ext))) {
+      return false;
+    }
+    
+    // Check if it looks like a displayable image/video URL
+    return isImageUrl(url) || isVideoUrl(url);
+  }
+  
+  return false;
+}
+
 export function getPubkeyColor(pubkey: string): string {
   const colors = [
     '#dc2626', // red
