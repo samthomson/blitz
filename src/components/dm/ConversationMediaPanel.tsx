@@ -20,6 +20,9 @@ export const ConversationMediaPanel = ({ conversationId, onSelectMessage, open, 
   const { messages } = useConversationMessages(conversationId);
   const { media, links, docs } = useConversationMedia(messages);
   
+  // Check if all categories are empty
+  const hasNoContent = media.length === 0 && links.length === 0 && docs.length === 0;
+  
   // Find the default tab with content
   const defaultTab = media.length > 0 ? 'media' : links.length > 0 ? 'links' : 'docs';
   const [activeTab, setActiveTab] = useState<'media' | 'links' | 'docs'>(defaultTab);
@@ -31,7 +34,13 @@ export const ConversationMediaPanel = ({ conversationId, onSelectMessage, open, 
     return map;
   }, [messages]);
 
-  const panelContent = (
+  const panelContent = hasNoContent ? (
+    <div className="flex-1 flex items-center justify-center">
+      <div className="text-center text-muted-foreground px-4">
+        <p className="text-sm">No media, links, or documents found in this conversation</p>
+      </div>
+    </div>
+  ) : (
     <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as typeof activeTab)} className="flex-1 flex flex-col min-h-0">
       <TabsList className="w-full grid grid-cols-3 rounded-none border-b h-auto p-0 bg-transparent">
         <TabsTrigger 
