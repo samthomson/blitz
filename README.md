@@ -12,6 +12,10 @@ A Nostr direct messaging client.
 - Supports outbox model, preset relays, or hybrid combination
 - 10002 (Relay List), 10050 (DM Relay List), and 10006 (Blocked Relay List) NIP 65 relay lists supported
 - subjects supported in conversations
+- search
+  - messages
+  - contact names
+- shorts
 
 ## DMs on Nostr
 
