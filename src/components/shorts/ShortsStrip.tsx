@@ -1,10 +1,9 @@
 import { useState } from 'react';
-import { Plus, Play, User } from 'lucide-react';
+import { Plus, Play } from 'lucide-react';
 import { useFollows } from '@/hooks/useFollows';
 import { useShortsFromAuthors, useShorts } from '@/hooks/useShorts';
 import { useAuthor } from '@/hooks/useAuthor';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { RecordShortModal } from './RecordShortModal';
@@ -52,7 +51,7 @@ interface ShortsStripProps {
 }
 
 export function ShortsStrip({ className }: ShortsStripProps) {
-  const { user, metadata } = useCurrentUser();
+  const { user } = useCurrentUser();
   const { data: follows } = useFollows();
   const { data: followedShorts, isLoading } = useShortsFromAuthors(follows, 20);
   const { data: myShorts } = useShorts({
@@ -85,9 +84,9 @@ export function ShortsStrip({ className }: ShortsStripProps) {
 
   return (
     <>
-      <div className={cn("py-3 border-b", className)}>
-        <div className="px-4">
-          <div className="flex items-center gap-3 overflow-x-auto scrollbar-hide pb-1">
+      <div className={cn("pt-2.5 pb-2 border-b", className)}>
+        <div className="pl-4 pr-4">
+          <div className="flex items-center gap-3 overflow-x-auto scrollbar-hide py-0.5 pl-0.5">
             {/* My Shorts / Add button - only show if logged in */}
             {user && (
               <button

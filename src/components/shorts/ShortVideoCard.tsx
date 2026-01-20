@@ -2,7 +2,7 @@ import { useRef, useState, useEffect } from 'react';
 import { useAuthor } from '@/hooks/useAuthor';
 import { getDisplayName } from '@/lib/genUserName';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Play, Pause, Volume2, VolumeX } from 'lucide-react';
+import { Play, Volume2, VolumeX } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ShortVideo } from '@/hooks/useShorts';
 

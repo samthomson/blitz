@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X, Plus, Play, Trash2, Loader2 } from 'lucide-react';
+import { Plus, Play, Trash2, Loader2 } from 'lucide-react';
 import { useShorts } from '@/hooks/useShorts';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
@@ -180,14 +180,8 @@ export function MyShortsModal({ open, onOpenChange, onAddNew }: MyShortsModalPro
         ) : (
           <>
             {/* Header */}
-            <DialogHeader className="p-4 border-b flex-shrink-0">
-              <div className="flex items-center justify-between">
-                <DialogTitle>My Shorts</DialogTitle>
-                <Button size="sm" onClick={onAddNew}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  New Short
-                </Button>
-              </div>
+            <DialogHeader className="px-4 pt-4 pb-3 border-b flex-shrink-0">
+              <DialogTitle>My Shorts</DialogTitle>
             </DialogHeader>
 
             {/* Grid */}
@@ -242,6 +236,16 @@ export function MyShortsModal({ open, onOpenChange, onAddNew }: MyShortsModalPro
                       </div>
                     </button>
                   ))}
+                  {/* Add new short tile */}
+                  <button
+                    onClick={onAddNew}
+                    className="relative aspect-[9/16] rounded-md overflow-hidden bg-muted/50 border-2 border-dashed border-muted-foreground/30 hover:border-primary/50 hover:bg-muted transition-colors flex items-center justify-center group"
+                  >
+                    <div className="flex flex-col items-center gap-2 text-muted-foreground group-hover:text-primary transition-colors">
+                      <Plus className="h-8 w-8" />
+                      <span className="text-xs">New</span>
+                    </div>
+                  </button>
                 </div>
               )}
             </div>
