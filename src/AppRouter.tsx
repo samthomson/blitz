@@ -3,6 +3,7 @@ import { ScrollToTop } from "./components/ScrollToTop";
 
 import Index from "./pages/Index";
 import Test from "./pages/Test";
+import Shorts from "./pages/Shorts";
 import NotFound from "./pages/NotFound";
 
 export function AppRouter() {
@@ -12,6 +13,7 @@ export function AppRouter() {
       <Routes>
         <Route path="/" element={<Index />} />
         <Route path="/test" element={<Test />} />
+        <Route path="/shorts" element={<Shorts />} />
         {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
         <Route path="*" element={<NotFound />} />
       </Routes>

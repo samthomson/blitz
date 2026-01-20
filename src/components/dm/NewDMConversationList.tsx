@@ -15,6 +15,7 @@ import { cn } from '@/lib/utils';
 import { NewConversationDialog } from '@/components/NewConversationDialog';
 import { SearchResults } from '@/components/dm/SearchResults';
 import { APP_NAME, APP_DESCRIPTION } from '@/lib/constants';
+import { ShortsStrip } from '@/components/shorts/ShortsStrip';
 
 interface DMConversationListProps {
   selectedPubkey: string | null;
@@ -360,6 +361,9 @@ export const NewDMConversationList = ({
           </div>
         </div>
       </div>
+
+      {/* Shorts strip */}
+      <ShortsStrip />
 
       {/* Search input */}
       <div className="py-3 border-b flex-shrink-0">
