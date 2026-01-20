@@ -11,12 +11,36 @@ interface PublishShortParams {
 // NIP-71 Kind 34236 for vertical videos
 const KIND_VERTICAL_VIDEO = 34236;
 
+// Get video dimensions from blob
+async function getVideoDimensions(blob: Blob): Promise<{ width: number; height: number }> {
+  return new Promise((resolve) => {
+    const video = document.createElement('video');
+    video.preload = 'metadata';
+    
+    video.onloadedmetadata = () => {
+      URL.revokeObjectURL(video.src);
+      resolve({ width: video.videoWidth, height: video.videoHeight });
+    };
+    
+    video.onerror = () => {
+      URL.revokeObjectURL(video.src);
+      // Default to vertical dimensions if we can't read
+      resolve({ width: 1080, height: 1920 });
+    };
+    
+    video.src = URL.createObjectURL(blob);
+  });
+}
+
 export function usePublishShort() {
   const { mutateAsync: publishEvent } = useNostrPublish();
   const { mutateAsync: uploadFile } = useUploadFile();
 
   return useMutation({
     mutationFn: async ({ videoBlob, title, description }: PublishShortParams) => {
+      // Get actual video dimensions
+      const dimensions = await getVideoDimensions(videoBlob);
+      
       // Convert blob to File for upload
       const videoFile = new File([videoBlob], `short-${Date.now()}.webm`, { 
         type: videoBlob.type || 'video/webm' 
@@ -42,8 +66,13 @@ export function usePublishShort() {
       const size = tags.find(t => t[0] === 'size')?.[1];
       const hash = tags.find(t => t[0] === 'x')?.[1];
 
-      // Get video dimensions (default to vertical 9:16)
-      const dim = '1080x1920';
+      // Use actual dimensions
+      const dim = `${dimensions.width}x${dimensions.height}`;
+      
+      // Determine if video is vertical or horizontal
+      const isVertical = dimensions.height > dimensions.width;
+      // Use kind 34236 for vertical, 34235 for horizontal
+      const kind = isVertical ? KIND_VERTICAL_VIDEO : 34235;
 
       // Build imeta tag per NIP-71/NIP-92
       const imetaParts = [
@@ -58,9 +87,9 @@ export function usePublishShort() {
       const dTag = crypto.randomUUID();
       const publishedAt = Math.floor(Date.now() / 1000).toString();
 
-      // Publish NIP-71 vertical video event
+      // Publish NIP-71 video event
       const event = await publishEvent({
-        kind: KIND_VERTICAL_VIDEO,
+        kind,
         content: description,
         tags: [
           ['d', dTag],

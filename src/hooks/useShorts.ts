@@ -2,8 +2,10 @@ import { useNostr } from '@nostrify/react';
 import { useQuery } from '@tanstack/react-query';
 import type { NostrEvent, NostrFilter } from '@nostrify/nostrify';
 
-// NIP-71 Kind 34236 for vertical videos
+// NIP-71 Video kinds
+const KIND_HORIZONTAL_VIDEO = 34235;
 const KIND_VERTICAL_VIDEO = 34236;
+const VIDEO_KINDS = [KIND_HORIZONTAL_VIDEO, KIND_VERTICAL_VIDEO];
 
 export interface ShortVideo {
   id: string;
@@ -77,7 +79,7 @@ export function useShorts({ limit = 20, authors }: UseShortsOptions = {}) {
       const signal = AbortSignal.any([c.signal, AbortSignal.timeout(5000)]);
 
       const filter: NostrFilter = {
-        kinds: [KIND_VERTICAL_VIDEO],
+        kinds: VIDEO_KINDS,
         limit,
       };
 
@@ -130,7 +132,7 @@ export function useShortsFromAuthors(authors: string[] | undefined, limit = 10) 
       const signal = AbortSignal.any([c.signal, AbortSignal.timeout(5000)]);
 
       const events = await nostr.query([{
-        kinds: [KIND_VERTICAL_VIDEO],
+        kinds: VIDEO_KINDS,
         authors,
         limit,
       }], { signal });

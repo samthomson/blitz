@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { X, ChevronUp, ChevronDown, Volume2, VolumeX } from 'lucide-react';
+import { X, ChevronUp, ChevronDown, Volume2, VolumeX, Play, Loader2 } from 'lucide-react';
 import { useAuthor } from '@/hooks/useAuthor';
 import { getDisplayName } from '@/lib/genUserName';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -30,15 +30,55 @@ function SingleShortView({ short, isActive, isMuted, onToggleMute }: SingleShort
   const author = useAuthor(short.pubkey);
   const metadata = author.data?.metadata;
   const displayName = getDisplayName(short.pubkey, metadata);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
+  // Handle play/pause
+  const togglePlay = useCallback(() => {
+    if (!videoRef.current) return;
+    
+    if (isPlaying) {
+      videoRef.current.pause();
+    } else {
+      videoRef.current.play().catch(() => {});
+    }
+  }, [isPlaying]);
+
+  // Sync playing state with video element
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    const handlePlay = () => setIsPlaying(true);
+    const handlePause = () => setIsPlaying(false);
+    const handleCanPlay = () => setIsLoading(false);
+    const handleWaiting = () => setIsLoading(true);
+
+    video.addEventListener('play', handlePlay);
+    video.addEventListener('pause', handlePause);
+    video.addEventListener('canplay', handleCanPlay);
+    video.addEventListener('waiting', handleWaiting);
+
+    return () => {
+      video.removeEventListener('play', handlePlay);
+      video.removeEventListener('pause', handlePause);
+      video.removeEventListener('canplay', handleCanPlay);
+      video.removeEventListener('waiting', handleWaiting);
+    };
+  }, []);
+
+  // Reset and try to play when becoming active
   useEffect(() => {
     if (!videoRef.current) return;
 
     if (isActive) {
-      videoRef.current.play().catch(() => {});
+      setIsLoading(true);
+      videoRef.current.load();
+      // Don't auto-play - let user tap to play (mobile requirement)
     } else {
       videoRef.current.pause();
       videoRef.current.currentTime = 0;
+      setIsPlaying(false);
     }
   }, [isActive]);
 
@@ -58,12 +98,35 @@ function SingleShortView({ short, isActive, isMuted, onToggleMute }: SingleShort
         muted={isMuted}
         loop
         poster={short.thumbnailUrl}
+        onClick={togglePlay}
       />
+
+      {/* Big play button overlay - show when not playing */}
+      {!isPlaying && !isLoading && (
+        <button
+          onClick={togglePlay}
+          className="absolute inset-0 flex items-center justify-center"
+        >
+          <div className="w-20 h-20 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center">
+            <Play className="h-10 w-10 text-white fill-white ml-1" />
+          </div>
+        </button>
+      )}
+
+      {/* Loading spinner */}
+      {isLoading && (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <Loader2 className="h-10 w-10 text-white animate-spin" />
+        </div>
+      )}
 
       {/* Mute button */}
       <button
-        onClick={onToggleMute}
-        className="absolute top-4 right-4 w-10 h-10 rounded-full bg-black/50 flex items-center justify-center text-white hover:bg-black/70 transition-colors"
+        onClick={(e) => {
+          e.stopPropagation();
+          onToggleMute();
+        }}
+        className="absolute top-4 right-4 w-10 h-10 rounded-full bg-black/50 flex items-center justify-center text-white hover:bg-black/70 transition-colors z-10"
       >
         {isMuted ? (
           <VolumeX className="h-5 w-5" />
@@ -73,7 +136,7 @@ function SingleShortView({ short, isActive, isMuted, onToggleMute }: SingleShort
       </button>
 
       {/* Author info and title overlay */}
-      <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/80 to-transparent">
+      <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/80 to-transparent pointer-events-none">
         <div className="flex items-center gap-3 mb-2">
           <Avatar className="h-10 w-10 border-2 border-white">
             <AvatarImage src={metadata?.picture} />
@@ -93,6 +156,8 @@ function SingleShortView({ short, isActive, isMuted, onToggleMute }: SingleShort
 export function ShortViewerModal({ shorts, startIndex = 0, open, onOpenChange }: ShortViewerModalProps) {
   const [currentIndex, setCurrentIndex] = useState(startIndex);
   const [isMuted, setIsMuted] = useState(true);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const touchStartY = useRef<number | null>(null);
 
   // Reset to start index when modal opens
   useEffect(() => {
@@ -129,50 +194,104 @@ export function ShortViewerModal({ shorts, startIndex = 0, open, onOpenChange }:
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [open, goToPrevious, goToNext]);
 
+  // Touch/swipe handling
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    touchStartY.current = e.touches[0].clientY;
+  }, []);
+
+  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+    if (touchStartY.current === null) return;
+    
+    const touchEndY = e.changedTouches[0].clientY;
+    const diff = touchStartY.current - touchEndY;
+    const threshold = 50; // minimum swipe distance
+    
+    if (diff > threshold) {
+      // Swiped up - go to next
+      goToNext();
+    } else if (diff < -threshold) {
+      // Swiped down - go to previous
+      goToPrevious();
+    }
+    
+    touchStartY.current = null;
+  }, [goToNext, goToPrevious]);
+
   if (shorts.length === 0) return null;
 
   const currentShort = shorts[currentIndex];
+  const hasPrevious = currentIndex > 0;
+  const hasNext = currentIndex < shorts.length - 1;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md w-full h-[90vh] max-h-[800px] p-0 bg-black border-0 overflow-hidden [&>button]:hidden">
-        {/* Close button */}
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => onOpenChange(false)}
-          className="absolute top-4 left-4 z-20 text-white hover:bg-white/20"
-        >
-          <X className="h-6 w-6" />
-        </Button>
+      <DialogContent 
+        className="max-w-md w-full h-[85vh] max-h-[700px] p-0 bg-black border-0 overflow-hidden [&>button]:hidden"
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+      >
+        {/* Fixed header area for close button and progress */}
+        <div className="absolute top-0 left-0 right-0 z-30 p-3 flex items-center justify-between">
+          {/* Close button */}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => onOpenChange(false)}
+            className="text-white bg-black/50 hover:bg-black/70 h-10 w-10"
+          >
+            <X className="h-6 w-6" />
+          </Button>
 
-        {/* Navigation buttons */}
-        <div className="absolute right-4 top-1/2 -translate-y-1/2 z-20 flex flex-col gap-2">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={goToPrevious}
-            disabled={currentIndex === 0}
-            className={cn(
-              "text-white hover:bg-white/20",
-              currentIndex === 0 && "opacity-30 cursor-not-allowed"
-            )}
-          >
-            <ChevronUp className="h-6 w-6" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={goToNext}
-            disabled={currentIndex === shorts.length - 1}
-            className={cn(
-              "text-white hover:bg-white/20",
-              currentIndex === shorts.length - 1 && "opacity-30 cursor-not-allowed"
-            )}
-          >
-            <ChevronDown className="h-6 w-6" />
-          </Button>
+          {/* Progress indicator */}
+          {shorts.length > 1 && (
+            <div className="flex gap-1.5 bg-black/30 px-3 py-1.5 rounded-full">
+              {shorts.map((_, index) => (
+                <button
+                  key={index}
+                  onClick={() => setCurrentIndex(index)}
+                  className={cn(
+                    "w-2.5 h-2.5 rounded-full transition-all",
+                    index === currentIndex ? "bg-white scale-110" : "bg-white/40 hover:bg-white/60"
+                  )}
+                />
+              ))}
+            </div>
+          )}
+
+          {/* Spacer for balance */}
+          <div className="w-10" />
         </div>
+
+        {/* Navigation buttons - side positioned */}
+        {shorts.length > 1 && (
+          <>
+            {/* Previous button */}
+            <button
+              onClick={goToPrevious}
+              disabled={!hasPrevious}
+              className={cn(
+                "absolute top-1/2 -translate-y-1/2 left-2 z-20 flex items-center justify-center",
+                "w-10 h-10 rounded-full bg-black/50 text-white transition-all",
+                hasPrevious ? "hover:bg-black/70 active:scale-95" : "opacity-30 cursor-not-allowed"
+              )}
+            >
+              <ChevronUp className="h-6 w-6" />
+            </button>
+
+            {/* Next button */}
+            <button
+              onClick={goToNext}
+              disabled={!hasNext}
+              className={cn(
+                "absolute top-1/2 -translate-y-1/2 right-2 z-20 flex items-center justify-center",
+                "w-10 h-10 rounded-full bg-black/50 text-white transition-all",
+                hasNext ? "hover:bg-black/70 active:scale-95" : "opacity-30 cursor-not-allowed"
+              )}
+            >
+              <ChevronDown className="h-6 w-6" />
+            </button>
+          </>
+        )}
 
         {/* Current short */}
         <SingleShortView
@@ -182,18 +301,12 @@ export function ShortViewerModal({ shorts, startIndex = 0, open, onOpenChange }:
           onToggleMute={() => setIsMuted((prev) => !prev)}
         />
 
-        {/* Progress indicator */}
-        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 flex gap-1">
-          {shorts.map((_, index) => (
-            <div
-              key={index}
-              className={cn(
-                "w-2 h-2 rounded-full transition-colors",
-                index === currentIndex ? "bg-white" : "bg-white/30"
-              )}
-            />
-          ))}
-        </div>
+        {/* Swipe hint on mobile */}
+        {shorts.length > 1 && (
+          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 text-white/50 text-xs md:hidden">
+            Swipe up/down for more
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );
