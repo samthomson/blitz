@@ -108,10 +108,24 @@ export const ConversationMediaPanel = ({ conversationId, onSelectMessage, open, 
                       onClick={() => onSelectMessage?.(item.messageId)}
                       className="aspect-square bg-primary/10 rounded-sm overflow-hidden hover:opacity-80 transition-opacity relative"
                     >
+                      <div 
+                        className="absolute inset-0 pointer-events-none"
+                        style={{
+                          backgroundImage: `
+                            linear-gradient(45deg, #f0f0f0 25%, transparent 25%),
+                            linear-gradient(-45deg, #f0f0f0 25%, transparent 25%),
+                            linear-gradient(45deg, transparent 75%, #f0f0f0 75%),
+                            linear-gradient(-45deg, transparent 75%, #f0f0f0 75%)
+                          `,
+                          backgroundSize: '8px 8px',
+                          backgroundPosition: '0 0, 0 4px, 4px -4px, -4px 0px',
+                          backgroundColor: '#ffffff'
+                        }}
+                      />
                       <img 
                         src={item.url} 
                         alt="" 
-                        className="w-full h-full object-cover"
+                        className="w-full h-full object-cover relative z-10"
                         loading="lazy"
                       />
                     </button>
@@ -152,7 +166,21 @@ export const ConversationMediaPanel = ({ conversationId, onSelectMessage, open, 
                     onClick={() => onSelectMessage?.(item.messageId)}
                     className="aspect-square bg-primary/10 rounded-sm overflow-hidden hover:opacity-80 transition-opacity relative"
                   >
-                    <div className="w-full h-full">
+                    <div 
+                      className="absolute inset-0 pointer-events-none z-0"
+                      style={{
+                        backgroundImage: `
+                          linear-gradient(45deg, #f0f0f0 25%, transparent 25%),
+                          linear-gradient(-45deg, #f0f0f0 25%, transparent 25%),
+                          linear-gradient(45deg, transparent 75%, #f0f0f0 75%),
+                          linear-gradient(-45deg, transparent 75%, #f0f0f0 75%)
+                        `,
+                        backgroundSize: '8px 8px',
+                        backgroundPosition: '0 0, 0 4px, 4px -4px, -4px 0px',
+                        backgroundColor: '#ffffff'
+                      }}
+                    />
+                    <div className="w-full h-full relative z-10">
                       {isVideo ? (
                         <VideoThumbnail fileMetadata={fileMetadata} />
                       ) : (
