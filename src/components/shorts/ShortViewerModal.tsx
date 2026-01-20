@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { X, ChevronUp, ChevronDown, Volume2, VolumeX, Play, Loader2 } from 'lucide-react';
+import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { useAuthor } from '@/hooks/useAuthor';
 import { getDisplayName } from '@/lib/genUserName';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -156,8 +157,8 @@ function SingleShortView({ short, isActive, isMuted, onToggleMute }: SingleShort
 export function ShortViewerModal({ shorts, startIndex = 0, open, onOpenChange }: ShortViewerModalProps) {
   const [currentIndex, setCurrentIndex] = useState(startIndex);
   const [isMuted, setIsMuted] = useState(true);
-  const containerRef = useRef<HTMLDivElement>(null);
   const touchStartY = useRef<number | null>(null);
+  const [hasSwipedBefore, setHasSwipedBefore] = useLocalStorage('shorts-swipe-hint-dismissed', false);
 
   // Reset to start index when modal opens
   useEffect(() => {
@@ -209,13 +210,15 @@ export function ShortViewerModal({ shorts, startIndex = 0, open, onOpenChange }:
     if (diff > threshold) {
       // Swiped up - go to next
       goToNext();
+      setHasSwipedBefore(true);
     } else if (diff < -threshold) {
       // Swiped down - go to previous
       goToPrevious();
+      setHasSwipedBefore(true);
     }
     
     touchStartY.current = null;
-  }, [goToNext, goToPrevious]);
+  }, [goToNext, goToPrevious, setHasSwipedBefore]);
 
   if (shorts.length === 0) return null;
 
@@ -244,14 +247,16 @@ export function ShortViewerModal({ shorts, startIndex = 0, open, onOpenChange }:
 
           {/* Progress indicator */}
           {shorts.length > 1 && (
-            <div className="flex gap-1.5 bg-black/30 px-3 py-1.5 rounded-full">
+            <div className="flex gap-1.5 bg-black/40 px-3 py-1.5 rounded-full backdrop-blur-sm">
               {shorts.map((_, index) => (
                 <button
                   key={index}
                   onClick={() => setCurrentIndex(index)}
                   className={cn(
-                    "w-2.5 h-2.5 rounded-full transition-all",
-                    index === currentIndex ? "bg-white scale-110" : "bg-white/40 hover:bg-white/60"
+                    "w-2 h-2 rounded-full transition-all",
+                    index === currentIndex 
+                      ? "bg-primary ring-2 ring-primary/50 scale-125" 
+                      : "bg-white/30 hover:bg-white/50"
                   )}
                 />
               ))}
@@ -301,10 +306,10 @@ export function ShortViewerModal({ shorts, startIndex = 0, open, onOpenChange }:
           onToggleMute={() => setIsMuted((prev) => !prev)}
         />
 
-        {/* Swipe hint on mobile */}
-        {shorts.length > 1 && (
-          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 text-white/50 text-xs md:hidden">
-            Swipe up/down for more
+        {/* Swipe hint on mobile - only show if user hasn't swiped before */}
+        {shorts.length > 1 && !hasSwipedBefore && (
+          <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-20 text-white/40 text-[10px] md:hidden animate-pulse">
+            Swipe to navigate
           </div>
         )}
       </DialogContent>
